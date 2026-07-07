@@ -1,5 +1,5 @@
 import { createAmbulances, type Ambulance } from "@/engine/Ambulance";
-import { createDoctors, treatmentDuration, type Doctor } from "@/engine/Doctor";
+import { createDoctors, treatmentDuration, type Doctor, type DoctorStatus } from "@/engine/Doctor";
 import { createICUBeds, icuDuration, type ICUBed } from "@/engine/ICU";
 import { generatePatient, patientComparator, severityWeight, escalatePatient, type Patient, type Severity } from "@/engine/Patient";
 import { EventLog, type SimEvent } from "@/engine/events";
@@ -40,6 +40,11 @@ export interface SimulationSnapshot {
   metrics: MetricsPoint[];
   stats: SimulationStats;
   capacityCrisis: boolean;
+  /**
+   * Set to true by the admin's kill switch.
+   * Patient clients detect this and show the "Session ended" state.
+   */
+  sessionEnded?: boolean;
 }
 
 type Listener = (snapshot: SimulationSnapshot, latest?: SimEvent) => void;
@@ -125,6 +130,55 @@ export class SimulationEngine {
     this.updateConfig(presets[name]);
   }
 
+  // ─── ADMIN OVERRIDES ──────────────────────────────────────────────────────
+
+  /**
+   * Admin manually injects a patient with a specific severity.
+   * Bypasses the Poisson arrival model — useful for live demos.
+   */
+  injectPatient(severity: Severity) {
+    const patient = generatePatient(this.tickCount);
+    // Override the randomly generated severity with the admin's choice
+    const overridden: Patient = { ...patient, severity, originalSeverity: severity };
+    this.addPatient(overridden);
+    this.logEvent("patient-arrived", `[ADMIN] Manually injected ${overridden.name} (${severity}) for demo purposes.`, overridden);
+  }
+
+  /**
+   * Admin manually sets a doctor's status.
+   * Sets manualOverride=true so the engine won't auto-assign this doctor.
+   * To release the override, set status back to "Idle" (manualOverride=false).
+   */
+  setDoctorStatus(doctorId: string, status: DoctorStatus) {
+    this.doctors = this.doctors.map((doctor) => {
+      if (doctor.id !== doctorId) return doctor;
+      const isOverride = status === "On Break" || status === "In Surgery";
+      return {
+        ...doctor,
+        status,
+        manualOverride: isOverride,
+        // If releasing override (back to Idle), clear the patient too
+        patient: isOverride ? doctor.patient : undefined,
+      };
+    });
+    this.emit();
+  }
+
+  /**
+   * Admin toggles a bed's maintenance state.
+   * Maintenance beds are shown distinctly in the UI and are skipped
+   * when the engine tries to admit a new CRITICAL patient.
+   */
+  setICUBedMaintenance(bedId: string, maintenance: boolean) {
+    this.icuBeds = this.icuBeds.map((bed) => {
+      if (bed.id !== bedId) return bed;
+      return { ...bed, maintenance, patient: maintenance ? undefined : bed.patient };
+    });
+    this.emit();
+  }
+
+  // ─── CORE LOOP ────────────────────────────────────────────────────────────
+
   tick() {
     this.tickCount += 1;
     this.createWalkIns();
@@ -175,7 +229,8 @@ export class SimulationEngine {
   private addPatient(patient: Patient) {
     this.stats.totalArrived += 1;
     if (patient.severity === "CRITICAL") {
-      const bed = this.icuBeds.find((item) => !item.patient);
+      // Look for a free bed that is NOT under maintenance
+      const bed = this.icuBeds.find((item) => !item.patient && !item.maintenance);
       if (bed) {
         bed.patient = patient;
         bed.remainingTicks = icuDuration();
@@ -204,6 +259,8 @@ export class SimulationEngine {
 
   private advanceDoctors() {
     this.doctors = this.doctors.map((doctor) => {
+      // Skip doctors with manual override — admin controls their state
+      if (doctor.manualOverride) return doctor;
       if (doctor.status === "Idle") return doctor;
       const remainingTicks = doctor.remainingTicks - 1;
       if (remainingTicks > 0) return { ...doctor, remainingTicks };
@@ -218,7 +275,8 @@ export class SimulationEngine {
 
   private assignDoctors() {
     this.doctors = this.doctors.map((doctor) => {
-      if (doctor.status !== "Idle") return doctor;
+      // Skip: not idle, or admin has manually overridden this doctor
+      if (doctor.status !== "Idle" || doctor.manualOverride) return doctor;
       const patient = this.queue.dequeue();
       if (!patient) return doctor;
       const ticks = treatmentDuration(patient);
@@ -229,7 +287,7 @@ export class SimulationEngine {
 
   private advanceICU() {
     this.icuBeds = this.icuBeds.map((bed) => {
-      if (!bed.patient) return bed;
+      if (!bed.patient || bed.maintenance) return bed;
       const remainingTicks = bed.remainingTicks - 1;
       if (remainingTicks > 0) return { ...bed, remainingTicks };
       this.logEvent("icu-released", `${bed.patient.name} was stabilized and released from ICU.`, bed.patient);
@@ -271,8 +329,9 @@ export class SimulationEngine {
   }
 
   private isCapacityCrisis(queue: Patient[]) {
-    const full = this.icuBeds.length > 0 && this.icuBeds.every((bed) => bed.patient);
-    return full && queue.some((patient) => patient.severity === "CRITICAL" && this.tickCount - patient.arrivalTick > 24);
+    // Crisis if ICU is full (no non-maintenance beds free) and a critical patient is waiting
+    const availableBeds = this.icuBeds.filter((bed) => !bed.patient && !bed.maintenance);
+    return availableBeds.length === 0 && queue.some((patient) => patient.severity === "CRITICAL" && this.tickCount - patient.arrivalTick > 24);
   }
 
   private resizeDoctors(count: number) {

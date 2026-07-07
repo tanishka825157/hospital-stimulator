@@ -6,18 +6,22 @@
   :root {
     color-scheme: dark;
     font-family: Inter, ui-sans-serif, system-ui, sans-serif;
-    --color-command: #0b0f19;
-    --color-panel: #111827;
-    --color-elevated: #161d2e;
-    --color-line: #1f2937;
-    --color-ink: #e5e7eb;
-    --color-muted: #8b94a8;
+    --color-command: #080c15;
+    --color-panel: #0f1623;
+    --color-elevated: #141c2e;
+    --color-line: #1e2a3d;
+    --color-ink: #e2e8f0;
+    --color-muted: #7c8ca8;
     --color-accent: #2dd4bf;
+    --color-critical: #EF4444;
+    --color-serious: #F97316;
+    --color-moderate: #EAB308;
+    --color-mild: #22C55E;
   }
 
   body {
     margin: 0;
-    min-width: 1024px;
+    min-width: 320px;
     min-height: 100vh;
     background: var(--color-command);
     color: var(--color-ink);
@@ -26,20 +30,16 @@
 
   .light-mode {
     color-scheme: light;
-    --color-command: #f8fafc;
+    --color-command: #f0f4fa;
     --color-panel: #ffffff;
-    --color-elevated: #f1f5f9;
-    --color-line: #d8dee8;
-    --color-ink: #102033;
-    --color-muted: #5f6b7d;
+    --color-elevated: #e8eef8;
+    --color-line: #cdd7e8;
+    --color-ink: #0f1f35;
+    --color-muted: #5a6a82;
     --color-accent: #0d9488;
   }
 
-  button,
-  input,
-  select {
-    font: inherit;
-  }
+  button, input, select { font: inherit; }
 
   select option {
     background: var(--color-panel);
@@ -48,60 +48,68 @@
 }
 
 @layer components {
+  /* Glass card — the main surface used across admin and patient views */
   .glass-panel {
-    @apply border border-line bg-panel transition-colors duration-200;
+    @apply border border-line transition-colors duration-200;
+    background-color: var(--color-panel);
   }
 
   .metric-card {
-    @apply rounded-xl border border-line bg-panel px-4 py-2 transition-colors duration-200;
+    @apply rounded-xl border border-line px-4 py-2 transition-colors duration-200;
+    background-color: var(--color-panel);
   }
 
-  .thin-scrollbar::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+  .micro-label {
+    @apply text-[11px] font-semibold uppercase tracking-widest text-muted;
   }
 
-  .thin-scrollbar::-webkit-scrollbar-track {
-    background: transparent;
+  /* Form inputs */
+  .form-input {
+    @apply w-full rounded-xl border border-line bg-command px-4 py-3 text-sm text-ink outline-none transition-all focus:ring-1;
+    --tw-ring-color: var(--color-accent);
   }
 
-  .thin-scrollbar::-webkit-scrollbar-thumb {
-    background: rgba(148, 163, 184, 0.2);
-    border-radius: 999px;
+  .form-input::placeholder {
+    color: var(--color-muted);
+    opacity: 0.5;
   }
 
-  .thin-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: rgba(148, 163, 184, 0.4);
+  .form-input:focus {
+    border-color: var(--color-accent);
   }
+
+  /* Scrollbar */
+  .thin-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+  .thin-scrollbar::-webkit-scrollbar-track { background: transparent; }
+  .thin-scrollbar::-webkit-scrollbar-thumb { background: rgba(148,163,184,0.15); border-radius: 999px; }
+  .thin-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(148,163,184,0.35); }
 }
+
+/* ── Animations ─────────────────────────────────────────── */
 
 @keyframes crisisPulse {
-  0%, 100% { opacity: 0.6; }
+  0%, 100% { opacity: 0.7; }
   50% { opacity: 1; }
 }
-
-.crisis-pulse {
-  animation: crisisPulse 2s ease-in-out infinite;
-}
+.crisis-pulse { animation: crisisPulse 1.8s ease-in-out infinite; }
 
 @keyframes severityFlash {
-  0%, 100% {
-    opacity: 1;
-    transform: scale(1);
-    box-shadow: 0 0 0 rgba(239, 68, 68, 0);
-  }
-  25%, 75% {
-    opacity: 0.85;
-    transform: scale(1.03);
-    box-shadow: 0 0 20px currentColor;
-  }
+  0%, 100% { opacity: 1; transform: scale(1); box-shadow: 0 0 0 rgba(239, 68, 68, 0); }
+  25%, 75% { opacity: 0.85; transform: scale(1.03); box-shadow: 0 0 20px currentColor; }
+}
+.severity-flash { animation: severityFlash 600ms ease-out 1; }
+
+/* Ambient heartbeat line for patient view — subtle horizontal shimmer */
+@keyframes heartbeatShimmer {
+  0%, 100% { opacity: 0.12; transform: scaleX(1); }
+  50% { opacity: 0.22; transform: scaleX(1.02); }
+}
+.heartbeat-ambient {
+  animation: heartbeatShimmer 3s ease-in-out infinite;
 }
 
-.severity-flash {
-  animation: severityFlash 600ms ease-out 1;
-}
-
+/* Light mode card shadows */
 .light-mode .glass-panel,
 .light-mode .metric-card {
-  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 4px 24px rgba(15, 23, 42, 0.06), 0 1px 4px rgba(15, 23, 42, 0.04);
 }
