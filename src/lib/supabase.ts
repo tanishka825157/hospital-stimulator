@@ -1,26 +1,37 @@
 /**
  * Supabase client singleton.
  *
- * This file creates the single Supabase JS client used everywhere in the app.
- * Import `supabase` from here — never create a second client instance.
- *
- * Credentials come from Vite env vars (VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY).
- * These are safe to expose in the browser because Supabase's Row Level Security
- * (RLS) policies, not the anon key, are what protect your data.
+ * Exports `isDemoMode` — true when Supabase credentials are not configured.
+ * In demo mode, auth and sync fall back to localStorage/no-op implementations.
  */
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string) ?? "";
+const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string) ?? "";
 
-if (!supabaseUrl || supabaseUrl.includes("your-project")) {
-  console.warn(
-    "[HospitalSim] Supabase not configured. Copy .env.example → .env and fill in your project URL and anon key.\n" +
-    "Get them from: Supabase Dashboard → Settings → API"
+/**
+ * True when the app is running without real Supabase credentials.
+ * Demo mode: localhost auth only, no realtime sync.
+ */
+export const isDemoMode =
+  !supabaseUrl ||
+  supabaseUrl.includes("your-project") ||
+  supabaseUrl.trim() === "";
+
+if (isDemoMode) {
+  console.info(
+    "[HospitalSim] Running in DEMO MODE 🎭\n" +
+    "Demo credentials:\n" +
+    "  Admin:   admin@hospital.com   / admin123\n" +
+    "  Patient: patient@hospital.com / patient123\n" +
+    "To enable multi-device sync, add Supabase credentials to .env"
   );
 }
 
-export const supabase = createClient(supabaseUrl ?? "", supabaseAnonKey ?? "");
+export const supabase = createClient(
+  isDemoMode ? "https://placeholder.supabase.co" : supabaseUrl,
+  isDemoMode ? "placeholder-key" : supabaseAnonKey
+);
 
 /** Type-safe table name helpers */
 export const TABLES = {

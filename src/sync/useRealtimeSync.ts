@@ -1,29 +1,27 @@
 /**
  * useRealtimeSync — Supabase Realtime sync layer.
  *
- * This hook has two modes, selected by the `role` parameter:
+ * In DEMO MODE: this hook is a no-op. The simulation engine runs locally
+ * and the patient view reads directly from the same store in the same tab.
+ * Multi-device sync requires Supabase — configure .env to unlock it.
  *
- * ADMIN MODE:
+ * In SUPABASE MODE:
+ *
+ * ADMIN ROLE:
  *   - On every simulation store state change, pushes the full snapshot
  *     JSON to Supabase's `simulation_state` table.
  *   - Joins a Presence channel to track how many patient sessions are watching.
- *   - The Admin's browser tab IS the simulation engine. If the tab closes,
- *     the simulation pauses (known v2 limitation; v3 stretch goal: move engine
- *     to a persistent Node worker).
  *
- * PATIENT MODE:
+ * PATIENT ROLE:
  *   - Subscribes to Realtime changes on `simulation_state`.
  *   - On each change, calls `useSimulationStore.actions.hydrate(snapshot)`
  *     to update the patient's local view.
  *   - Joins the Presence channel so the admin can count viewers.
- *   - If `snapshot.sessionEnded` is true, the patient sees an offline screen.
- *
- * IMPORTANT: Sync logic lives here, NOT inside SimulationEngine.
- * The engine remains framework-agnostic and localStorage-free.
+ *   - If `snapshot.sessionEnded` is true, shows the offline screen.
  */
 import { useEffect, useRef } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
-import { supabase, TABLES, SIM_CHANNEL } from "@/lib/supabase";
+import { isDemoMode, supabase, TABLES, SIM_CHANNEL } from "@/lib/supabase";
 import { useSimulationStore } from "@/store/useSimulationStore";
 import type { SimulationSnapshot } from "@/engine/SimulationEngine";
 
@@ -34,18 +32,18 @@ export function useRealtimeSync(role: SyncRole, userId: string) {
   const { actions } = useSimulationStore();
 
   useEffect(() => {
-    // Create the Realtime channel with Presence enabled
+    // ── DEMO MODE: no-op ──────────────────────────────────────────────────
+    if (isDemoMode) return;
+
+    // ── SUPABASE MODE ─────────────────────────────────────────────────────
     const channel = supabase.channel(SIM_CHANNEL, {
       config: { presence: { key: userId } },
     });
     channelRef.current = channel;
 
     if (role === "admin") {
-      // ── ADMIN: push snapshot to DB on every store change ──────────────────
-      // We use Zustand's subscribe (not a React effect) so we get updates
-      // even when the component hasn't re-rendered yet.
       const unsubscribe = useSimulationStore.subscribe(async (state) => {
-        const snapshot = {
+        const snapshot: Partial<SimulationSnapshot> = {
           running: state.running,
           tick: state.tick,
           config: state.config,
@@ -53,12 +51,12 @@ export function useRealtimeSync(role: SyncRole, userId: string) {
           doctors: state.doctors,
           icuBeds: state.icuBeds,
           ambulances: state.ambulances,
-          events: state.events.slice(0, 50), // cap for wire size
-          metrics: state.metrics.slice(-60), // keep last 60 points
+          events: state.events.slice(0, 50),
+          metrics: state.metrics.slice(-60),
           stats: state.stats,
           capacityCrisis: state.capacityCrisis,
           sessionEnded: state.sessionEnded,
-        } satisfies Partial<SimulationSnapshot>;
+        };
 
         await supabase
           .from(TABLES.simulationState)
@@ -66,11 +64,10 @@ export function useRealtimeSync(role: SyncRole, userId: string) {
           .eq("id", 1);
       });
 
-      // Track viewer presence
       channel.on("presence", { event: "sync" }, () => {
         const state = channel.presenceState();
-        const count = Object.keys(state).length - 1; // subtract admin's own presence
-        actions.setViewerCount(Math.max(0, count));
+        const count = Math.max(0, Object.keys(state).length - 1);
+        actions.setViewerCount(count);
       });
 
       channel.subscribe(async (status) => {
@@ -85,7 +82,7 @@ export function useRealtimeSync(role: SyncRole, userId: string) {
       };
 
     } else {
-      // ── PATIENT: subscribe to DB changes, hydrate local store ─────────────
+      // PATIENT
       channel
         .on(
           "postgres_changes",
@@ -97,10 +94,7 @@ export function useRealtimeSync(role: SyncRole, userId: string) {
         )
         .subscribe(async (status) => {
           if (status === "SUBSCRIBED") {
-            // Also track presence so admin sees viewer count
             await channel.track({ role: "patient", userId });
-
-            // Fetch the current snapshot immediately (don't wait for first UPDATE)
             const { data } = await supabase
               .from(TABLES.simulationState)
               .select("snapshot")
