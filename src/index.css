@@ -1,0 +1,107 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+    font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+    --color-command: #0b0f19;
+    --color-panel: #111827;
+    --color-elevated: #161d2e;
+    --color-line: #1f2937;
+    --color-ink: #e5e7eb;
+    --color-muted: #8b94a8;
+    --color-accent: #2dd4bf;
+  }
+
+  body {
+    margin: 0;
+    min-width: 1024px;
+    min-height: 100vh;
+    background: var(--color-command);
+    color: var(--color-ink);
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  .light-mode {
+    color-scheme: light;
+    --color-command: #f8fafc;
+    --color-panel: #ffffff;
+    --color-elevated: #f1f5f9;
+    --color-line: #d8dee8;
+    --color-ink: #102033;
+    --color-muted: #5f6b7d;
+    --color-accent: #0d9488;
+  }
+
+  button,
+  input,
+  select {
+    font: inherit;
+  }
+
+  select option {
+    background: var(--color-panel);
+    color: var(--color-ink);
+  }
+}
+
+@layer components {
+  .glass-panel {
+    @apply border border-line bg-panel transition-colors duration-200;
+  }
+
+  .metric-card {
+    @apply rounded-xl border border-line bg-panel px-4 py-2 transition-colors duration-200;
+  }
+
+  .thin-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .thin-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .thin-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.2);
+    border-radius: 999px;
+  }
+
+  .thin-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(148, 163, 184, 0.4);
+  }
+}
+
+@keyframes crisisPulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+.crisis-pulse {
+  animation: crisisPulse 2s ease-in-out infinite;
+}
+
+@keyframes severityFlash {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+    box-shadow: 0 0 0 rgba(239, 68, 68, 0);
+  }
+  25%, 75% {
+    opacity: 0.85;
+    transform: scale(1.03);
+    box-shadow: 0 0 20px currentColor;
+  }
+}
+
+.severity-flash {
+  animation: severityFlash 600ms ease-out 1;
+}
+
+.light-mode .glass-panel,
+.light-mode .metric-card {
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.08);
+}
