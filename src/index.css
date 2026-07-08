@@ -6,18 +6,33 @@
   :root {
     color-scheme: dark;
     font-family: Inter, ui-sans-serif, system-ui, sans-serif;
-    --color-command: #0b0f19;
-    --color-panel: #111827;
-    --color-elevated: #161d2e;
-    --color-line: #1f2937;
-    --color-ink: #e5e7eb;
-    --color-muted: #8b94a8;
-    --color-accent: #2dd4bf;
+
+    /* RGB channels — used by Tailwind for opacity modifier support (bg-panel/80 etc.) */
+    --color-command-rgb:  8   12  21;
+    --color-panel-rgb:    15  22  35;
+    --color-elevated-rgb: 20  28  46;
+    --color-line-rgb:     30  42  61;
+    --color-ink-rgb:      226 232 240;
+    --color-muted-rgb:    124 140 168;
+    --color-accent-rgb:   45  212 191;
+
+    /* Solid fallback vars (used in places that don't need opacity like var(--color-panel) directly) */
+    --color-command:  rgb(8   12  21);
+    --color-panel:    rgb(15  22  35);
+    --color-elevated: rgb(20  28  46);
+    --color-line:     rgb(30  42  61);
+    --color-ink:      rgb(226 232 240);
+    --color-muted:    rgb(124 140 168);
+    --color-accent:   rgb(45  212 191);
+    --color-critical: #EF4444;
+    --color-serious:  #F97316;
+    --color-moderate: #EAB308;
+    --color-mild:     #22C55E;
   }
 
   body {
     margin: 0;
-    min-width: 1024px;
+    min-width: 320px;
     min-height: 100vh;
     background: var(--color-command);
     color: var(--color-ink);
@@ -26,20 +41,24 @@
 
   .light-mode {
     color-scheme: light;
-    --color-command: #f8fafc;
-    --color-panel: #ffffff;
-    --color-elevated: #f1f5f9;
-    --color-line: #d8dee8;
-    --color-ink: #102033;
-    --color-muted: #5f6b7d;
-    --color-accent: #0d9488;
+    --color-command-rgb:  240 244 250;
+    --color-panel-rgb:    255 255 255;
+    --color-elevated-rgb: 232 238 248;
+    --color-line-rgb:     205 215 232;
+    --color-ink-rgb:      15  31  53;
+    --color-muted-rgb:    90  106 130;
+    --color-accent-rgb:   13  148 136;
+
+    --color-command:  rgb(240 244 250);
+    --color-panel:    rgb(255 255 255);
+    --color-elevated: rgb(232 238 248);
+    --color-line:     rgb(205 215 232);
+    --color-ink:      rgb(15  31  53);
+    --color-muted:    rgb(90  106 130);
+    --color-accent:   rgb(13  148 136);
   }
 
-  button,
-  input,
-  select {
-    font: inherit;
-  }
+  button, input, select { font: inherit; }
 
   select option {
     background: var(--color-panel);
@@ -49,59 +68,62 @@
 
 @layer components {
   .glass-panel {
-    @apply border border-line bg-panel transition-colors duration-200;
+    @apply border border-line/60 bg-panel backdrop-blur-sm transition-colors duration-200;
   }
 
   .metric-card {
-    @apply rounded-xl border border-line bg-panel px-4 py-2 transition-colors duration-200;
+    @apply rounded-xl border border-line/60 bg-panel/80 px-4 py-2 transition-colors duration-200;
   }
 
-  .thin-scrollbar::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+  .micro-label {
+    @apply text-[11px] font-semibold uppercase tracking-widest text-muted;
   }
 
-  .thin-scrollbar::-webkit-scrollbar-track {
-    background: transparent;
+  /* Form inputs */
+  .form-input {
+    @apply w-full rounded-xl border border-line bg-command px-4 py-3 text-sm text-ink outline-none transition-all;
   }
 
-  .thin-scrollbar::-webkit-scrollbar-thumb {
-    background: rgba(148, 163, 184, 0.2);
-    border-radius: 999px;
+  .form-input::placeholder {
+    color: var(--color-muted);
+    opacity: 0.5;
   }
 
-  .thin-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: rgba(148, 163, 184, 0.4);
+  .form-input:focus {
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 1px var(--color-accent);
   }
+
+  /* Scrollbar */
+  .thin-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+  .thin-scrollbar::-webkit-scrollbar-track { background: transparent; }
+  .thin-scrollbar::-webkit-scrollbar-thumb { background: rgba(148,163,184,0.15); border-radius: 999px; }
+  .thin-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(148,163,184,0.35); }
 }
+
+/* ── Animations ─────────────────────────────────────────── */
 
 @keyframes crisisPulse {
-  0%, 100% { opacity: 0.6; }
+  0%, 100% { opacity: 0.7; }
   50% { opacity: 1; }
 }
-
-.crisis-pulse {
-  animation: crisisPulse 2s ease-in-out infinite;
-}
+.crisis-pulse { animation: crisisPulse 1.8s ease-in-out infinite; }
 
 @keyframes severityFlash {
-  0%, 100% {
-    opacity: 1;
-    transform: scale(1);
-    box-shadow: 0 0 0 rgba(239, 68, 68, 0);
-  }
-  25%, 75% {
-    opacity: 0.85;
-    transform: scale(1.03);
-    box-shadow: 0 0 20px currentColor;
-  }
+  0%, 100% { opacity: 1; transform: scale(1); box-shadow: 0 0 0 rgba(239, 68, 68, 0); }
+  25%, 75% { opacity: 0.85; transform: scale(1.03); box-shadow: 0 0 20px currentColor; }
 }
+.severity-flash { animation: severityFlash 600ms ease-out 1; }
 
-.severity-flash {
-  animation: severityFlash 600ms ease-out 1;
+@keyframes heartbeatShimmer {
+  0%, 100% { opacity: 0.12; transform: scaleX(1); }
+  50% { opacity: 0.22; transform: scaleX(1.02); }
+}
+.heartbeat-ambient {
+  animation: heartbeatShimmer 3s ease-in-out infinite;
 }
 
 .light-mode .glass-panel,
 .light-mode .metric-card {
-  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 4px 24px rgba(15, 23, 42, 0.06), 0 1px 4px rgba(15, 23, 42, 0.04);
 }

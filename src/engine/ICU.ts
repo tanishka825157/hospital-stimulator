@@ -4,6 +4,12 @@ export interface ICUBed {
   id: string;
   patient?: Patient;
   remainingTicks: number;
+  /**
+   * When true, admin has marked this bed as under maintenance.
+   * The engine treats maintenance beds as unavailable (same as occupied).
+   * Maintenance beds are shown with a distinct visual state in the UI.
+   */
+  maintenance?: boolean;
 }
 
 export function createICUBeds(count: number): ICUBed[] {

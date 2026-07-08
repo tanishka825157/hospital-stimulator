@@ -1,11 +1,17 @@
 import { create } from "zustand";
 import { simulationEngine, type SimulationSnapshot } from "@/engine/SimulationEngine";
 import type { SimEvent } from "@/engine/events";
+import type { Severity } from "@/engine/Patient";
+import type { DoctorStatus } from "@/engine/Doctor";
 
 interface SimulationStore extends SimulationSnapshot {
   learnMode: boolean;
   selectedView: "Dashboard" | "Queue" | "Doctors" | "ICU" | "Ambulances" | "Reports" | "Learn";
   narration: SimEvent[];
+  /** Number of patient sessions currently watching (populated by the sync layer) */
+  viewerCount: number;
+  /** True when the patient view receives a sessionEnded flag from admin */
+  sessionEnded: boolean;
   actions: {
     start: () => void;
     pause: () => void;
@@ -16,6 +22,19 @@ interface SimulationStore extends SimulationSnapshot {
     setLearnMode: (enabled: boolean) => void;
     setSelectedView: (view: SimulationStore["selectedView"]) => void;
     downloadReport: () => void;
+    // Admin override actions
+    injectPatient: (severity: Severity) => void;
+    setDoctorStatus: (doctorId: string, status: DoctorStatus) => void;
+    setICUBedMaintenance: (bedId: string, maintenance: boolean) => void;
+    setViewerCount: (count: number) => void;
+    /**
+     * Called by the patient-side sync layer to apply an incoming snapshot
+     * without triggering the local engine. The engine is Admin-only; patients
+     * just render whatever the admin pushes.
+     */
+    hydrate: (snapshot: SimulationSnapshot) => void;
+    /** Admin kill switch — marks session as ended and pushes to Supabase */
+    endSession: () => void;
   };
 }
 
@@ -50,13 +69,16 @@ export const useSimulationStore = create<SimulationStore>((set, get) => {
     learnMode: true,
     selectedView: "Dashboard",
     narration: [],
+    viewerCount: 0,
+    sessionEnded: false,
+
     actions: {
       start: () => simulationEngine.start(),
       pause: () => simulationEngine.pause(),
       reset: () => {
         persistSnapshot(get(), "reset");
         simulationEngine.reset();
-        set({ narration: [] });
+        set({ narration: [], sessionEnded: false });
       },
       setSpeed: (speed) => simulationEngine.setSpeed(speed),
       updateConfig: (config) => simulationEngine.updateConfig(config),
@@ -73,11 +95,45 @@ export const useSimulationStore = create<SimulationStore>((set, get) => {
         link.download = `hospital-sim-report-t${snapshot.tick}.json`;
         link.click();
         URL.revokeObjectURL(url);
-      }
-    }
+      },
+
+      // ─── ADMIN OVERRIDES ─────────────────────────────────────────────────
+      injectPatient: (severity) => simulationEngine.injectPatient(severity),
+      setDoctorStatus: (doctorId, status) => simulationEngine.setDoctorStatus(doctorId, status),
+      setICUBedMaintenance: (bedId, maintenance) => simulationEngine.setICUBedMaintenance(bedId, maintenance),
+      setViewerCount: (viewerCount) => set({ viewerCount }),
+
+      // ─── PATIENT HYDRATION ────────────────────────────────────────────────
+      /**
+       * Called ONLY on the patient side. Replaces simulation state with the
+       * snapshot received from Supabase Realtime. Does NOT touch the local
+       * SimulationEngine — patients are pure read-only consumers.
+       */
+      hydrate: (snapshot) => {
+        set((state) => ({
+          ...snapshot,
+          learnMode: state.learnMode,
+          selectedView: state.selectedView,
+          sessionEnded: snapshot.sessionEnded ?? false,
+          narration: state.learnMode && snapshot.events[0]
+            ? [snapshot.events[0], ...state.narration].slice(0, 12)
+            : state.narration,
+        }));
+      },
+
+      // ─── KILL SWITCH ──────────────────────────────────────────────────────
+      endSession: () => {
+        simulationEngine.pause();
+        set({ sessionEnded: true });
+        // The sync layer (useRealtimeSync) will detect sessionEnded=true
+        // and push a final snapshot with sessionEnded=true to Supabase,
+        // causing all patient clients to show the "Session ended" state.
+      },
+    },
   };
 });
 
+// Subscribe the store to engine ticks (admin side only)
 simulationEngine.subscribe((snapshot, latest) => {
   useSimulationStore.setState((state) => ({
     ...snapshot,
