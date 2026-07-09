@@ -4,9 +4,9 @@ import { severityWeight } from "@/engine/Patient";
 /**
  * DoctorStatus extended with manual override states.
  * - "Idle"       — available for assignment (engine-managed)
- * - "Treating"   — currently treating a patient (engine-managed)
- * - "On Break"   — manually marked by admin; engine skips assignment
- * - "In Surgery" — manually marked by admin; engine skips assignment
+ * - "Treating"   — currently treating a patient assigned by admin
+ * - "On Break"   — manually marked unavailable by admin
+ * - "In Surgery" — manually marked unavailable by admin
  */
 export type DoctorStatus = "Idle" | "Treating" | "On Break" | "In Surgery";
 
@@ -21,8 +21,8 @@ export interface Doctor {
   treatedCount: number;
   /**
    * When true, admin has manually overridden this doctor's status.
-   * The engine's assignDoctors() and advanceDoctors() loops skip doctors
-   * with manualOverride=true so the override persists until admin clears it.
+   * The engine never auto-assigns doctors; this flag is used by the UI to
+   * distinguish an intentional unavailable state from an idle doctor.
    */
   manualOverride?: boolean;
 }

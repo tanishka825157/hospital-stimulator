@@ -1,13 +1,10 @@
 import { create } from "zustand";
-import { simulationEngine, type SimulationSnapshot } from "@/engine/SimulationEngine";
-import type { SimEvent } from "@/engine/events";
+import { simulationEngine, type BedStatus, type PatientInput, type SimulationSnapshot } from "@/engine/SimulationEngine";
 import type { Severity } from "@/engine/Patient";
 import type { DoctorStatus } from "@/engine/Doctor";
 
 interface SimulationStore extends SimulationSnapshot {
-  learnMode: boolean;
-  selectedView: "Dashboard" | "Queue" | "Doctors" | "ICU" | "Ambulances" | "Reports" | "Learn";
-  narration: SimEvent[];
+  selectedView: "Dashboard" | "Queue" | "Doctors" | "ICU" | "Ambulances" | "Reports";
   /** Number of patient sessions currently watching (populated by the sync layer) */
   viewerCount: number;
   /** True when the patient view receives a sessionEnded flag from admin */
@@ -19,13 +16,18 @@ interface SimulationStore extends SimulationSnapshot {
     setSpeed: (speed: number) => void;
     updateConfig: (config: Parameters<typeof simulationEngine.updateConfig>[0]) => void;
     applyScenario: (scenario: "normal" | "mass-casualty" | "night-shift") => void;
-    setLearnMode: (enabled: boolean) => void;
     setSelectedView: (view: SimulationStore["selectedView"]) => void;
     downloadReport: () => void;
-    // Admin override actions
-    injectPatient: (severity: Severity) => void;
+    addPatient: (input: PatientInput) => void;
+    assignPatientToDoctor: (patientId: string, doctorId: string) => void;
+    assignPatientToBed: (patientId: string, bedId: string) => void;
     setDoctorStatus: (doctorId: string, status: DoctorStatus) => void;
-    setICUBedMaintenance: (bedId: string, maintenance: boolean) => void;
+    setBedStatus: (bedId: string, status: BedStatus) => void;
+    dispatchAmbulance: (ambulanceId: string, destination?: string) => void;
+    confirmAmbulanceArrival: (ambulanceId: string) => void;
+    returnAmbulanceToIdle: (ambulanceId: string) => void;
+    dischargePatient: (patientId: string) => void;
+    overrideSeverity: (patientId: string, severity: Severity) => void;
     setViewerCount: (count: number) => void;
     /**
      * Called by the patient-side sync layer to apply an incoming snapshot
@@ -66,9 +68,7 @@ function persistSnapshot(snapshot: SimulationSnapshot, reason: "current" | "rese
 export const useSimulationStore = create<SimulationStore>((set, get) => {
   return {
     ...initial,
-    learnMode: true,
     selectedView: "Dashboard",
-    narration: [],
     viewerCount: 0,
     sessionEnded: false,
 
@@ -78,12 +78,11 @@ export const useSimulationStore = create<SimulationStore>((set, get) => {
       reset: () => {
         persistSnapshot(get(), "reset");
         simulationEngine.reset();
-        set({ narration: [], sessionEnded: false });
+        set({ sessionEnded: false });
       },
       setSpeed: (speed) => simulationEngine.setSpeed(speed),
       updateConfig: (config) => simulationEngine.updateConfig(config),
       applyScenario: (scenario) => simulationEngine.applyScenario(scenario),
-      setLearnMode: (learnMode) => set({ learnMode }),
       setSelectedView: (selectedView) => set({ selectedView }),
       downloadReport: () => {
         const snapshot = get();
@@ -97,10 +96,17 @@ export const useSimulationStore = create<SimulationStore>((set, get) => {
         URL.revokeObjectURL(url);
       },
 
-      // ─── ADMIN OVERRIDES ─────────────────────────────────────────────────
-      injectPatient: (severity) => simulationEngine.injectPatient(severity),
+      // ─── ADMIN-CONTROLLED WORKFLOW ───────────────────────────────────────
+      addPatient: (input) => simulationEngine.addPatient(input),
+      assignPatientToDoctor: (patientId, doctorId) => simulationEngine.assignPatientToDoctor(patientId, doctorId),
+      assignPatientToBed: (patientId, bedId) => simulationEngine.assignPatientToBed(patientId, bedId),
       setDoctorStatus: (doctorId, status) => simulationEngine.setDoctorStatus(doctorId, status),
-      setICUBedMaintenance: (bedId, maintenance) => simulationEngine.setICUBedMaintenance(bedId, maintenance),
+      setBedStatus: (bedId, status) => simulationEngine.setBedStatus(bedId, status),
+      dispatchAmbulance: (ambulanceId, destination) => simulationEngine.dispatchAmbulance(ambulanceId, destination),
+      confirmAmbulanceArrival: (ambulanceId) => simulationEngine.confirmAmbulanceArrival(ambulanceId),
+      returnAmbulanceToIdle: (ambulanceId) => simulationEngine.returnAmbulanceToIdle(ambulanceId),
+      dischargePatient: (patientId) => simulationEngine.dischargePatient(patientId),
+      overrideSeverity: (patientId, severity) => simulationEngine.overrideSeverity(patientId, severity),
       setViewerCount: (viewerCount) => set({ viewerCount }),
 
       // ─── PATIENT HYDRATION ────────────────────────────────────────────────
@@ -112,12 +118,8 @@ export const useSimulationStore = create<SimulationStore>((set, get) => {
       hydrate: (snapshot) => {
         set((state) => ({
           ...snapshot,
-          learnMode: state.learnMode,
           selectedView: state.selectedView,
           sessionEnded: snapshot.sessionEnded ?? false,
-          narration: state.learnMode && snapshot.events[0]
-            ? [snapshot.events[0], ...state.narration].slice(0, 12)
-            : state.narration,
         }));
       },
 
@@ -134,10 +136,9 @@ export const useSimulationStore = create<SimulationStore>((set, get) => {
 });
 
 // Subscribe the store to engine ticks (admin side only)
-simulationEngine.subscribe((snapshot, latest) => {
-  useSimulationStore.setState((state) => ({
-    ...snapshot,
-    narration: latest && state.learnMode ? [latest, ...state.narration].slice(0, 12) : state.narration
+simulationEngine.subscribe((snapshot) => {
+  useSimulationStore.setState(() => ({
+    ...snapshot
   }));
   if (snapshot.tick % 15 === 0) persistSnapshot(snapshot, "current");
 });

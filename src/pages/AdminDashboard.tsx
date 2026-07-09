@@ -14,7 +14,7 @@
  * (v3 stretch goal: move engine to a persistent Node worker.)
  */
 import { useState, useEffect } from "react";
-import { Activity, Ambulance, BarChart3, Bed, BookOpen, LayoutDashboard, ListTree, Stethoscope, LogOut, Radio, Users, XCircle, SunMedium, Moon, GraduationCap, Pause, Play, RotateCcw } from "lucide-react";
+import { Activity, Ambulance, BarChart3, Bed, LayoutDashboard, ListTree, Stethoscope, LogOut, Radio, Users, XCircle, SunMedium, Moon, Pause, Play, RotateCcw, ClipboardList } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { AmbulancePanel } from "@/components/ambulances/AmbulancePanel";
 import { ConfigSliders } from "@/components/dashboard/ConfigSliders";
@@ -22,8 +22,6 @@ import { StatTicker } from "@/components/dashboard/StatTicker";
 import { DoctorOverridePanel } from "@/components/admin/DoctorOverridePanel";
 import { ICUOverridePanel } from "@/components/admin/ICUOverridePanel";
 import { ManualPatientInject } from "@/components/admin/ManualPatientInject";
-import { HowItWorks } from "@/components/learn-mode/HowItWorks";
-import { LearnPanel } from "@/components/learn-mode/LearnPanel";
 import { QueuePanel } from "@/components/queue/QueuePanel";
 import { ReportsPanel } from "@/components/reports/ReportsPanel";
 import { Button } from "@/components/ui/button";
@@ -38,12 +36,11 @@ const navItems = [
   { label: "Doctors", icon: Stethoscope },
   { label: "ICU", icon: Bed },
   { label: "Ambulances", icon: Ambulance },
-  { label: "Reports", icon: BarChart3 },
-  { label: "Learn", icon: BookOpen }
+  { label: "Reports", icon: BarChart3 }
 ] as const;
 
 export function AdminDashboard() {
-  const { selectedView, capacityCrisis, learnMode, running, config, viewerCount, sessionEnded, actions } = useSimulationStore();
+  const { selectedView, capacityCrisis, running, config, viewerCount, sessionEnded, actions } = useSimulationStore();
   const profile = useAuthStore((state) => state.profile);
   const logout = useAuthStore((state) => state.actions.logout);
   const [lightMode, setLightMode] = useState(false);
@@ -152,10 +149,6 @@ export function AdminDashboard() {
                 value={config.speed} onChange={(e) => actions.setSpeed(Number(e.target.value))}>
                 {[0.5, 1, 2, 5].map((s) => <option value={s} key={s}>{s}x</option>)}
               </select>
-              <Button variant={learnMode ? "default" : "secondary"} onClick={() => actions.setLearnMode(!learnMode)}>
-                <GraduationCap className="h-4 w-4" />
-                Learn {learnMode ? "On" : "Off"}
-              </Button>
               {/* Kill switch */}
               <Button variant="danger" size="icon" title="End broadcast session" onClick={() => setShowKillConfirm(true)}>
                 <XCircle className="h-4 w-4 text-critical" />
@@ -195,22 +188,19 @@ export function AdminDashboard() {
         </AnimatePresence>
 
         {/* Content */}
-        <div className={cn("flex-1 p-8 transition-all duration-300 ease-in-out", learnMode && selectedView !== "Learn" ? "pr-[352px]" : "pr-8")}>
+        <div className="flex-1 p-8">
           <AnimatePresence mode="wait">
             <motion.div key={selectedView} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }} className="space-y-6">
               {selectedView === "Dashboard" && <AdminDashboardGrid />}
-              {selectedView === "Queue" && <QueuePanel />}
+              {selectedView === "Queue" && <QueuePanel editable />}
               {selectedView === "Doctors" && <DoctorOverridePanel />}
               {selectedView === "ICU" && <ICUOverridePanel />}
-              {selectedView === "Ambulances" && <AmbulancePanel />}
+              {selectedView === "Ambulances" && <AmbulancePanel editable />}
               {selectedView === "Reports" && <ReportsPanel />}
-              {selectedView === "Learn" && <HowItWorks />}
             </motion.div>
           </AnimatePresence>
         </div>
       </main>
-
-      <LearnPanel />
 
       {/* Session ended overlay (after kill switch) */}
       <AnimatePresence>
@@ -232,14 +222,41 @@ export function AdminDashboard() {
 function AdminDashboardGrid() {
   return (
     <div className="grid grid-cols-12 gap-6">
-      <div className="col-span-7"><QueuePanel /></div>
+      <div className="col-span-7"><QueuePanel editable /></div>
       <div className="col-span-5 space-y-6">
         <ConfigSliders />
+        <ActivityFeed />
         <DoctorOverridePanel />
       </div>
       <div className="col-span-7"><ICUOverridePanel /></div>
-      <div className="col-span-5"><AmbulancePanel /></div>
+      <div className="col-span-5"><AmbulancePanel editable /></div>
       <div className="col-span-12"><ReportsPanel /></div>
+    </div>
+  );
+}
+
+function ActivityFeed() {
+  const events = useSimulationStore((state) => state.events);
+  const recentEvents = events.slice(0, 8);
+
+  return (
+    <div className="rounded-xl border border-line bg-panel p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-xs font-bold uppercase tracking-widest text-muted">Activity</h3>
+        <ClipboardList className="h-4 w-4 text-accent" />
+      </div>
+      {recentEvents.length === 0 ? (
+        <p className="text-xs leading-relaxed text-muted/70">Manual actions will appear here as the admin operates the scenario.</p>
+      ) : (
+        <div className="space-y-2">
+          {recentEvents.map((event) => (
+            <div key={event.id} className="rounded-lg border border-line/50 bg-elevated/30 px-3 py-2">
+              <div className="font-mono text-[10px] font-semibold text-accent">t+{event.tick}s</div>
+              <p className="mt-0.5 text-xs leading-relaxed text-ink/80">{event.message}</p>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

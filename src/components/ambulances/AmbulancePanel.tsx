@@ -1,10 +1,11 @@
 import { Ambulance as AmbulanceIcon } from "lucide-react";
 import { motion } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { useSimulationStore } from "@/store/useSimulationStore";
 
-export function AmbulancePanel() {
-  const { ambulances, config } = useSimulationStore();
+export function AmbulancePanel({ editable = false }: { editable?: boolean }) {
+  const { ambulances, config, actions } = useSimulationStore();
   const speed = config.speed;
 
   return (
@@ -17,6 +18,7 @@ export function AmbulancePanel() {
         {ambulances.map((ambulance) => {
           const isIdle = ambulance.status === "Idle";
           const isEnRoute = ambulance.status === "En Route";
+          const canConfirm = ambulance.status === "Dispatched" || ambulance.status === "En Route";
           
           return (
             <div key={ambulance.id} className="rounded-xl border border-line/60 bg-elevated/20 p-4 transition-colors hover:bg-elevated/30">
@@ -52,6 +54,25 @@ export function AmbulancePanel() {
                   />
                 )}
               </div>
+              {editable && (
+                <div className="mt-4 flex gap-2">
+                  {isIdle && (
+                    <Button size="sm" className="h-8 flex-1" onClick={() => actions.dispatchAmbulance(ambulance.id)}>
+                      Dispatch
+                    </Button>
+                  )}
+                  {canConfirm && (
+                    <Button size="sm" className="h-8 flex-1" onClick={() => actions.confirmAmbulanceArrival(ambulance.id)}>
+                      Confirm Arrival
+                    </Button>
+                  )}
+                  {ambulance.status === "Returning" && (
+                    <Button size="sm" variant="secondary" className="h-8 flex-1" onClick={() => actions.returnAmbulanceToIdle(ambulance.id)}>
+                      Mark Idle
+                    </Button>
+                  )}
+                </div>
+              )}
             </div>
           );
         })}

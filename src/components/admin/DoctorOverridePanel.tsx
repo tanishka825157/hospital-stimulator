@@ -1,12 +1,12 @@
 /**
  * DoctorOverridePanel — Admin-only doctor status controls.
- * Extends the standard DoctorPanel with a status dropdown per doctor.
- * When admin sets "On Break" or "In Surgery", the engine marks manualOverride=true
- * and skips that doctor for auto-assignment until admin sets them back to "Idle".
+ * Doctors stay idle until the admin assigns a patient from the queue.
+ * Moving a treating doctor away from "Treating" returns the patient to the queue.
  */
 import { motion } from "framer-motion";
 import { Circle, Stethoscope, UserCheck } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { useSimulationStore } from "@/store/useSimulationStore";
 import type { DoctorStatus } from "@/engine/Doctor";
 
@@ -64,7 +64,7 @@ export function DoctorOverridePanel() {
                 onChange={(e) => actions.setDoctorStatus(doctor.id, e.target.value as DoctorStatus)}
                 className={`w-full rounded-lg border border-line/60 bg-command/60 px-2 py-1.5 text-[11px] font-semibold outline-none transition-all cursor-pointer mb-3 ${statusColor[doctor.status]}`}
               >
-                {statusOptions.map((s) => (
+                {statusOptions.filter((s) => s !== "Treating" || doctor.patient).map((s) => (
                   <option key={s} value={s}>{s}</option>
                 ))}
               </select>
@@ -77,6 +77,9 @@ export function DoctorOverridePanel() {
                       {doctor.patient.name}
                     </p>
                     <p className="text-[11px] text-muted truncate capitalize pl-4">{doctor.patient.symptom}</p>
+                    <Button size="sm" variant="secondary" className="mt-2 h-7 w-full text-[10px]" onClick={() => actions.dischargePatient(doctor.patient!.id)}>
+                      Discharge / Complete
+                    </Button>
                   </div>
                 ) : (
                   <p className="text-xs font-medium italic text-muted/40 h-8 flex items-center">

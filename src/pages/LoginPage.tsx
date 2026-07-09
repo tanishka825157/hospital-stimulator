@@ -32,7 +32,7 @@ const DEMO_USERS = [
     icon: HeartPulse,
     email: "patient@hospital.com",
     password: "patient123",
-    description: "Live read-only view — queue, ICU, ambulances, narration",
+    description: "Live read-only view — queue, ICU, ambulances, activity",
     color: "text-serious border-serious/30 bg-serious/5",
     dot: "bg-serious",
   },
@@ -100,12 +100,12 @@ export function LoginPage() {
               Real-time emergency operations, managed by role.
             </h2>
             <p className="mt-4 max-w-lg text-sm leading-relaxed text-muted">
-              Admins run the simulation. Patients watch it live — queue, ICU beds, ambulances, and intelligent narration — from any device.
+              Admins operate the scenario by hand. Patients watch the queue, ICU beds, ambulances, and live activity from any device.
             </p>
           </motion.div>
           <div className="grid max-w-lg grid-cols-2 gap-4">
             <Feature icon={Shield} title="Admin control" text="Register patients, manage staff, dispatch ambulances." />
-            <Feature icon={HeartPulse} title="Patient view" text="Watch live — ICU, queue, and learning narration." />
+            <Feature icon={HeartPulse} title="Patient view" text="Watch live — ICU, queue, and admin activity." />
           </div>
         </div>
 

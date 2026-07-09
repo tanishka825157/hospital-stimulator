@@ -1,12 +1,17 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, Play, Timer, Activity } from "lucide-react";
+import { AlertTriangle, Bed, Play, Stethoscope, Timer, Activity } from "lucide-react";
+import type React from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { severityColor } from "@/engine/Patient";
+import { severityColor, type Severity } from "@/engine/Patient";
 import { useSimulationStore } from "@/store/useSimulationStore";
 
-export function QueuePanel() {
-  const { queue, tick, running, actions } = useSimulationStore();
+const severities: Severity[] = ["CRITICAL", "SERIOUS", "MODERATE", "MILD"];
+
+export function QueuePanel({ editable = false }: { editable?: boolean }) {
+  const { queue, tick, running, doctors, icuBeds, actions } = useSimulationStore();
+  const idleDoctors = doctors.filter((doctor) => doctor.status === "Idle");
+  const openBeds = icuBeds.filter((bed) => !bed.patient && !bed.maintenance);
   
   return (
     <Card>
@@ -29,12 +34,16 @@ export function QueuePanel() {
               </div>
               <div className="space-y-1">
                 <p className="text-sm font-semibold text-ink">Simulation paused</p>
-                <p className="text-xs text-muted max-w-[200px] mx-auto">Press Start to begin hospital command center live operations</p>
+                <p className="text-xs text-muted max-w-[220px] mx-auto">
+                  {editable ? "Add a patient manually, then start the clock when you are ready." : "Waiting for the admin to begin live operations."}
+                </p>
               </div>
-              <Button size="sm" onClick={actions.start} className="mt-2">
-                <Play className="h-3.5 w-3.5" />
-                Start Simulation
-              </Button>
+              {editable && (
+                <Button size="sm" onClick={actions.start} className="mt-2">
+                  <Play className="h-3.5 w-3.5" />
+                  Start Clock
+                </Button>
+              )}
             </div>
           ) : (
             // Empty queue state
@@ -60,39 +69,67 @@ export function QueuePanel() {
                     scale: { type: "tween", ease: "easeInOut", duration: 0.3 },
                     layout: { type: "spring", stiffness: 300, damping: 30 } 
                   }}
-                  className="rounded-xl border border-line bg-elevated/40 hover:bg-elevated/70 transition-colors px-4 py-3 flex items-center justify-between gap-4"
+                  className="rounded-xl border border-line bg-elevated/40 hover:bg-elevated/70 transition-colors px-4 py-3"
                   style={{ borderLeftColor: severityColor[patient.severity], borderLeftWidth: 3 }}
                   title={`${patient.name}, ${patient.age}, ${patient.symptom}`}
                 >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-xs text-muted/60 font-semibold">#{index + 1}</span>
-                      <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ backgroundColor: severityColor[patient.severity] }} />
-                      <strong className="truncate text-sm font-semibold text-ink">{patient.name}</strong>
-                      {patient.escalatedAt === tick && (
-                        <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-critical/10 text-critical">
-                          <AlertTriangle className="h-3 w-3" />
-                        </span>
-                      )}
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-xs text-muted/60 font-semibold">#{index + 1}</span>
+                        <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ backgroundColor: severityColor[patient.severity] }} />
+                        <strong className="truncate text-sm font-semibold text-ink">{patient.name}</strong>
+                        {patient.escalatedAt === tick && (
+                          <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-critical/10 text-critical">
+                            <AlertTriangle className="h-3 w-3" />
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-1 truncate text-xs text-muted leading-relaxed capitalize">{patient.symptom} &middot; {patient.source}</p>
                     </div>
-                    <p className="mt-1 truncate text-xs text-muted leading-relaxed capitalize">{patient.symptom} &middot; {patient.source}</p>
-                  </div>
-                  <div className="text-right shrink-0 flex flex-col items-end gap-1.5">
-                    <span
-                      className={`rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider border leading-none shrink-0 ${patient.escalatedAt === tick ? "severity-flash" : ""}`}
-                      style={{ 
-                        borderColor: `${severityColor[patient.severity]}30`, 
-                        color: severityColor[patient.severity],
-                        backgroundColor: `${severityColor[patient.severity]}08`
-                      }}
-                    >
-                      {patient.severity}
-                    </span>
-                    <div className="flex items-center justify-end gap-1 font-mono text-xs text-muted leading-none">
-                      <Timer className="h-3 w-3 text-muted/40" />
-                      <span>{tick - patient.arrivalTick}s</span>
+                    <div className="text-right shrink-0 flex flex-col items-end gap-1.5">
+                      <span
+                        className={`rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider border leading-none shrink-0 ${patient.escalatedAt === tick ? "severity-flash" : ""}`}
+                        style={{ 
+                          borderColor: `${severityColor[patient.severity]}30`, 
+                          color: severityColor[patient.severity],
+                          backgroundColor: `${severityColor[patient.severity]}08`
+                        }}
+                      >
+                        {patient.severity}
+                      </span>
+                      <div className="flex items-center justify-end gap-1 font-mono text-xs text-muted leading-none">
+                        <Timer className="h-3 w-3 text-muted/40" />
+                        <span>{tick - patient.arrivalTick}s</span>
+                      </div>
                     </div>
                   </div>
+                  {editable && (
+                    <div className="mt-3 grid grid-cols-[1fr,1fr,132px] gap-2">
+                      <AssignSelect
+                        icon={<Stethoscope className="h-3.5 w-3.5" />}
+                        label="Doctor"
+                        disabled={idleDoctors.length === 0}
+                        options={idleDoctors.map((doctor) => ({ value: doctor.id, label: doctor.name }))}
+                        onSelect={(doctorId) => actions.assignPatientToDoctor(patient.id, doctorId)}
+                      />
+                      <AssignSelect
+                        icon={<Bed className="h-3.5 w-3.5" />}
+                        label="ICU"
+                        disabled={openBeds.length === 0}
+                        options={openBeds.map((bed) => ({ value: bed.id, label: bed.id }))}
+                        onSelect={(bedId) => actions.assignPatientToBed(patient.id, bedId)}
+                      />
+                      <select
+                        value={patient.severity}
+                        onChange={(event) => actions.overrideSeverity(patient.id, event.target.value as Severity)}
+                        className="h-8 rounded-lg border border-line/60 bg-command/70 px-2 text-[10px] font-bold uppercase text-ink outline-none focus:border-accent/60"
+                        title="Override severity"
+                      >
+                        {severities.map((severity) => <option key={severity} value={severity}>{severity}</option>)}
+                      </select>
+                    </div>
+                  )}
                 </motion.div>
               ))}
             </AnimatePresence>
@@ -100,5 +137,37 @@ export function QueuePanel() {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function AssignSelect({
+  icon,
+  label,
+  options,
+  disabled,
+  onSelect
+}: {
+  icon: React.ReactNode;
+  label: string;
+  options: Array<{ value: string; label: string }>;
+  disabled: boolean;
+  onSelect: (value: string) => void;
+}) {
+  return (
+    <label className="relative flex h-8 items-center gap-1.5 rounded-lg border border-line/60 bg-command/70 px-2 text-[10px] font-semibold text-muted focus-within:border-accent/60">
+      {icon}
+      <select
+        value=""
+        disabled={disabled}
+        onChange={(event) => {
+          if (event.target.value) onSelect(event.target.value);
+          event.target.value = "";
+        }}
+        className="min-w-0 flex-1 bg-transparent text-[10px] text-ink outline-none disabled:text-muted/40"
+      >
+        <option value="">{disabled ? `No ${label}` : `Assign ${label}`}</option>
+        {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+      </select>
+    </label>
   );
 }

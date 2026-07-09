@@ -1,12 +1,11 @@
 import { createAmbulances, type Ambulance } from "@/engine/Ambulance";
 import { createDoctors, treatmentDuration, type Doctor, type DoctorStatus } from "@/engine/Doctor";
 import { createICUBeds, icuDuration, type ICUBed } from "@/engine/ICU";
-import { generatePatient, patientComparator, severityWeight, escalatePatient, type Patient, type Severity } from "@/engine/Patient";
+import { generatePatient, patientComparator, escalatePatient, type Patient, type Severity } from "@/engine/Patient";
 import { EventLog, type SimEvent } from "@/engine/events";
 import { PriorityQueue } from "@/engine/PriorityQueue";
 
 export interface SimulationConfig {
-  arrivalRate: number;
   doctorCount: number;
   icuBedCount: number;
   ambulanceCount: number;
@@ -27,6 +26,16 @@ export interface SimulationStats {
   averageWaitBySeverity: Record<Severity, number>;
   peakLoadTick: number;
 }
+
+export interface PatientInput {
+  name?: string;
+  age?: number;
+  symptom?: string;
+  severity: Severity;
+  source?: Patient["source"];
+}
+
+export type BedStatus = "Empty" | "Occupied" | "Under Maintenance";
 
 export interface SimulationSnapshot {
   running: boolean;
@@ -50,7 +59,6 @@ export interface SimulationSnapshot {
 type Listener = (snapshot: SimulationSnapshot, latest?: SimEvent) => void;
 
 const defaultConfig: SimulationConfig = {
-  arrivalRate: 6,
   doctorCount: 5,
   icuBedCount: 8,
   ambulanceCount: 4,
@@ -123,57 +131,193 @@ export class SimulationEngine {
 
   applyScenario(name: "normal" | "mass-casualty" | "night-shift") {
     const presets = {
-      normal: { arrivalRate: 6, doctorCount: 5, icuBedCount: 8, ambulanceCount: 4 },
-      "mass-casualty": { arrivalRate: 16, doctorCount: 7, icuBedCount: 9, ambulanceCount: 6 },
-      "night-shift": { arrivalRate: 5, doctorCount: 3, icuBedCount: 6, ambulanceCount: 2 }
+      normal: { doctorCount: 5, icuBedCount: 8, ambulanceCount: 4 },
+      "mass-casualty": { doctorCount: 7, icuBedCount: 9, ambulanceCount: 6 },
+      "night-shift": { doctorCount: 3, icuBedCount: 6, ambulanceCount: 2 }
     };
     this.updateConfig(presets[name]);
   }
 
-  // ─── ADMIN OVERRIDES ──────────────────────────────────────────────────────
+  // ─── ADMIN-CONTROLLED WORKFLOW ────────────────────────────────────────────
 
   /**
-   * Admin manually injects a patient with a specific severity.
-   * Bypasses the Poisson arrival model — useful for live demos.
+   * Admin manually adds a patient to the queue. No patient enters the system
+   * unless the admin takes this action or confirms an ambulance arrival.
    */
-  injectPatient(severity: Severity) {
-    const patient = generatePatient(this.tickCount);
-    // Override the randomly generated severity with the admin's choice
-    const overridden: Patient = { ...patient, severity, originalSeverity: severity };
-    this.addPatient(overridden);
-    this.logEvent("patient-arrived", `[ADMIN] Manually injected ${overridden.name} (${severity}) for demo purposes.`, overridden);
+  addPatient(input: PatientInput) {
+    const generated = generatePatient(this.tickCount, input.source ?? "Walk-in");
+    const patient: Patient = {
+      ...generated,
+      id: `P-${this.tickCount}-${Math.random().toString(16).slice(2, 8)}`,
+      name: input.name?.trim() || generated.name,
+      age: input.age && input.age > 0 ? input.age : generated.age,
+      symptom: input.symptom?.trim() || generated.symptom,
+      severity: input.severity,
+      originalSeverity: input.severity,
+      source: input.source ?? "Walk-in",
+      arrivalTick: this.tickCount
+    };
+    this.enqueuePatient(patient, `${patient.name}, ${patient.age}, arrived with ${patient.symptom}.`);
+    this.emit();
+    return patient;
   }
 
-  /**
-   * Admin manually sets a doctor's status.
-   * Sets manualOverride=true so the engine won't auto-assign this doctor.
-   * To release the override, set status back to "Idle" (manualOverride=false).
-   */
-  setDoctorStatus(doctorId: string, status: DoctorStatus) {
-    this.doctors = this.doctors.map((doctor) => {
-      if (doctor.id !== doctorId) return doctor;
-      const isOverride = status === "On Break" || status === "In Surgery";
-      return {
-        ...doctor,
-        status,
-        manualOverride: isOverride,
-        // If releasing override (back to Idle), clear the patient too
-        patient: isOverride ? doctor.patient : undefined,
-      };
-    });
+  assignPatientToDoctor(patientId: string, doctorId: string) {
+    const doctor = this.doctors.find((item) => item.id === doctorId);
+    if (!doctor || doctor.status !== "Idle") return;
+    const patient = this.removePatientFromQueue(patientId);
+    if (!patient) return;
+    const ticks = treatmentDuration(patient);
+    this.doctors = this.doctors.map((item) =>
+      item.id === doctorId
+        ? { ...item, status: "Treating", patient, startedAt: this.tickCount, treatmentTicks: ticks, remainingTicks: ticks, manualOverride: false }
+        : item
+    );
+    this.logEvent("doctor-started", `${doctor.name} started treating ${patient.name}.`, patient);
+    this.emit();
+  }
+
+  assignPatientToBed(patientId: string, bedId: string) {
+    const bed = this.icuBeds.find((item) => item.id === bedId);
+    if (!bed || bed.patient || bed.maintenance) return;
+    const patient = this.removePatientFromQueue(patientId) ?? this.removePatientFromDoctor(patientId);
+    if (!patient) return;
+    const ticks = icuDuration();
+    this.icuBeds = this.icuBeds.map((item) => item.id === bedId ? { ...item, patient, remainingTicks: ticks, maintenance: false } : item);
+    this.logEvent("icu-admitted", `${patient.name} assigned to ${bed.id}.`, patient);
     this.emit();
   }
 
   /**
-   * Admin toggles a bed's maintenance state.
-   * Maintenance beds are shown distinctly in the UI and are skipped
-   * when the engine tries to admit a new CRITICAL patient.
+   * Admin manually sets a doctor's status.
+   * If a doctor is moved away from Treating, their patient returns to the queue.
    */
-  setICUBedMaintenance(bedId: string, maintenance: boolean) {
+  setDoctorStatus(doctorId: string, status: DoctorStatus) {
+    let returnedPatient: Patient | undefined;
+    const doctorName = this.doctors.find((doctor) => doctor.id === doctorId)?.name ?? doctorId;
+    this.doctors = this.doctors.map((doctor) => {
+      if (doctor.id !== doctorId) return doctor;
+      if (doctor.patient && status !== "Treating") returnedPatient = doctor.patient;
+      return {
+        ...doctor,
+        status,
+        manualOverride: status === "On Break" || status === "In Surgery",
+        patient: status === "Treating" ? doctor.patient : undefined,
+        startedAt: status === "Treating" ? doctor.startedAt : undefined,
+        treatmentTicks: status === "Treating" ? doctor.treatmentTicks : 0,
+        remainingTicks: status === "Treating" ? doctor.remainingTicks : 0,
+      };
+    });
+    if (returnedPatient) this.queue.enqueue({ ...returnedPatient, arrivalTick: this.tickCount });
+    this.logEvent("doctor-status", `${doctorName} marked ${status}.`, returnedPatient);
+    this.emit();
+  }
+
+  /**
+   * Admin manually marks a bed empty, occupied, or under maintenance.
+   * Emptying/maintaining an occupied bed returns that patient to the queue.
+   */
+  setBedStatus(bedId: string, status: BedStatus) {
+    let returnedPatient: Patient | undefined;
     this.icuBeds = this.icuBeds.map((bed) => {
       if (bed.id !== bedId) return bed;
-      return { ...bed, maintenance, patient: maintenance ? undefined : bed.patient };
+      if (bed.patient && status !== "Occupied") returnedPatient = bed.patient;
+      return {
+        ...bed,
+        maintenance: status === "Under Maintenance",
+        patient: status === "Occupied" ? bed.patient : undefined,
+        remainingTicks: status === "Occupied" ? bed.remainingTicks : 0
+      };
     });
+    if (returnedPatient) this.queue.enqueue({ ...returnedPatient, arrivalTick: this.tickCount });
+    this.logEvent("bed-status", `${bedId} marked ${status}.`, returnedPatient);
+    this.emit();
+  }
+
+  dispatchAmbulance(ambulanceId: string, destination = "emergency call") {
+    const ambulance = this.ambulances.find((item) => item.id === ambulanceId);
+    if (!ambulance || ambulance.status !== "Idle") return;
+    const totalTicks = 16 + Math.floor(Math.random() * 18);
+    this.ambulances = this.ambulances.map((item) =>
+      item.id === ambulanceId ? { ...item, status: "Dispatched", remainingTicks: totalTicks, totalTicks, progress: 0 } : item
+    );
+    this.logEvent("ambulance-dispatched", `${ambulanceId} dispatched to ${destination}.`);
+    this.emit();
+  }
+
+  confirmAmbulanceArrival(ambulanceId: string) {
+    const ambulance = this.ambulances.find((item) => item.id === ambulanceId);
+    if (!ambulance || ambulance.status === "Idle") return;
+    const generated = generatePatient(this.tickCount, "Ambulance");
+    const patient: Patient = { ...generated, arrivalTick: this.tickCount };
+    this.enqueuePatient(patient, `${ambulanceId} arrived with ${patient.name}.`);
+    this.ambulances = this.ambulances.map((item) =>
+      item.id === ambulanceId ? { ...item, status: "Returning", remainingTicks: 10, totalTicks: 10, progress: 0 } : item
+    );
+    this.logEvent("ambulance-arrived", `${ambulanceId} arrival confirmed with ${patient.name}.`, patient);
+    this.emit();
+  }
+
+  returnAmbulanceToIdle(ambulanceId: string) {
+    const ambulance = this.ambulances.find((item) => item.id === ambulanceId);
+    if (!ambulance || ambulance.status !== "Returning") return;
+    this.ambulances = this.ambulances.map((item) =>
+      item.id === ambulanceId ? { ...item, status: "Idle", remainingTicks: 0, totalTicks: 0, progress: 0 } : item
+    );
+    this.logEvent("ambulance-returned", `${ambulanceId} returned to idle.`);
+    this.emit();
+  }
+
+  dischargePatient(patientId: string) {
+    let patient: Patient | undefined;
+    let location = "";
+
+    this.doctors = this.doctors.map((doctor) => {
+      if (doctor.patient?.id !== patientId) return doctor;
+      patient = doctor.patient;
+      location = doctor.name;
+      return { ...doctor, status: "Idle", patient: undefined, startedAt: undefined, treatmentTicks: 0, remainingTicks: 0, treatedCount: doctor.treatedCount + 1 };
+    });
+
+    if (!patient) {
+      this.icuBeds = this.icuBeds.map((bed) => {
+        if (bed.patient?.id !== patientId) return bed;
+        patient = bed.patient;
+        location = bed.id;
+        return { ...bed, patient: undefined, remainingTicks: 0 };
+      });
+    }
+
+    if (!patient) return;
+    this.stats.treated += 1;
+    this.waitTimes[patient.severity].push(this.tickCount - patient.arrivalTick);
+    this.logEvent("patient-discharged", `${patient.name} discharged from ${location}.`, patient);
+    this.emit();
+  }
+
+  overrideSeverity(patientId: string, newSeverity: Severity) {
+    const update = (patient: Patient): Patient => ({ ...patient, severity: newSeverity });
+    let patient: Patient | undefined;
+    const queued = this.queue.remove((item) => item.id === patientId);
+    if (queued) {
+      patient = update(queued);
+      this.queue.enqueue(patient);
+    }
+
+    this.doctors = this.doctors.map((doctor) => {
+      if (doctor.patient?.id !== patientId) return doctor;
+      patient = update(doctor.patient);
+      return { ...doctor, patient };
+    });
+
+    this.icuBeds = this.icuBeds.map((bed) => {
+      if (bed.patient?.id !== patientId) return bed;
+      patient = update(bed.patient);
+      return { ...bed, patient };
+    });
+
+    if (!patient) return;
+    this.logEvent("severity-overridden", `${patient.name} severity manually set to ${newSeverity}.`, patient);
     this.emit();
   }
 
@@ -181,12 +325,10 @@ export class SimulationEngine {
 
   tick() {
     this.tickCount += 1;
-    this.createWalkIns();
     this.advanceAmbulances();
     this.escalateWaitingPatients();
-    this.advanceICU();
+    this.advanceICUTimers();
     this.advanceDoctors();
-    this.assignDoctors();
     this.recordMetrics();
     this.emit();
   }
@@ -220,26 +362,10 @@ export class SimulationEngine {
     this.timer = window.setInterval(() => this.tick(), 1000 / this.config.speed);
   }
 
-  private createWalkIns() {
-    const lambdaPerTick = this.config.arrivalRate / 60;
-    const arrivals = this.poisson(lambdaPerTick);
-    for (let index = 0; index < arrivals; index += 1) this.addPatient(generatePatient(this.tickCount));
-  }
-
-  private addPatient(patient: Patient) {
+  private enqueuePatient(patient: Patient, message: string) {
     this.stats.totalArrived += 1;
-    if (patient.severity === "CRITICAL") {
-      // Look for a free bed that is NOT under maintenance
-      const bed = this.icuBeds.find((item) => !item.patient && !item.maintenance);
-      if (bed) {
-        bed.patient = patient;
-        bed.remainingTicks = icuDuration();
-        this.logEvent("icu-admitted", `${patient.name} moved directly to ICU for ${patient.symptom}.`, patient);
-        return;
-      }
-    }
     this.queue.enqueue(patient);
-    this.logEvent("patient-arrived", `${patient.name}, ${patient.age}, arrived with ${patient.symptom}.`, patient);
+    this.logEvent("patient-arrived", message, patient);
   }
 
   private escalateWaitingPatients() {
@@ -259,63 +385,27 @@ export class SimulationEngine {
 
   private advanceDoctors() {
     this.doctors = this.doctors.map((doctor) => {
-      // Skip doctors with manual override — admin controls their state
-      if (doctor.manualOverride) return doctor;
-      if (doctor.status === "Idle") return doctor;
+      if (doctor.status !== "Treating") return doctor;
       const remainingTicks = doctor.remainingTicks - 1;
-      if (remainingTicks > 0) return { ...doctor, remainingTicks };
-      if (doctor.patient) {
-        this.stats.treated += 1;
-        this.waitTimes[doctor.patient.severity].push((doctor.startedAt ?? this.tickCount) - doctor.patient.arrivalTick);
-        this.logEvent("doctor-finished", `${doctor.name} finished treating ${doctor.patient.name}.`, doctor.patient);
-      }
-      return { ...doctor, status: "Idle", patient: undefined, startedAt: undefined, treatmentTicks: 0, remainingTicks: 0, treatedCount: doctor.treatedCount + 1 };
+      return { ...doctor, remainingTicks: Math.max(0, remainingTicks) };
     });
   }
 
-  private assignDoctors() {
-    this.doctors = this.doctors.map((doctor) => {
-      // Skip: not idle, or admin has manually overridden this doctor
-      if (doctor.status !== "Idle" || doctor.manualOverride) return doctor;
-      const patient = this.queue.dequeue();
-      if (!patient) return doctor;
-      const ticks = treatmentDuration(patient);
-      this.logEvent("doctor-started", `${doctor.name} pulled ${patient.name} from the priority queue.`, patient);
-      return { ...doctor, status: "Treating", patient, startedAt: this.tickCount, treatmentTicks: ticks, remainingTicks: ticks };
-    });
-  }
-
-  private advanceICU() {
+  private advanceICUTimers() {
     this.icuBeds = this.icuBeds.map((bed) => {
       if (!bed.patient || bed.maintenance) return bed;
       const remainingTicks = bed.remainingTicks - 1;
-      if (remainingTicks > 0) return { ...bed, remainingTicks };
-      this.logEvent("icu-released", `${bed.patient.name} was stabilized and released from ICU.`, bed.patient);
-      return { ...bed, patient: undefined, remainingTicks: 0 };
+      return { ...bed, remainingTicks: Math.max(0, remainingTicks) };
     });
   }
 
   private advanceAmbulances() {
     this.ambulances = this.ambulances.map((ambulance) => {
-      if (ambulance.status === "Idle") {
-        if (Math.random() < 0.018 * this.config.arrivalRate) {
-          const totalTicks = 16 + Math.floor(Math.random() * 18);
-          this.logEvent("ambulance-dispatched", `${ambulance.id} dispatched to an emergency call.`);
-          return { ...ambulance, status: "Dispatched", remainingTicks: totalTicks, totalTicks, progress: 0 };
-        }
-        return ambulance;
-      }
-
+      if (ambulance.status === "Idle") return ambulance;
+      if (ambulance.status === "Returning") return ambulance;
       const remainingTicks = ambulance.remainingTicks - 1;
       const progress = 1 - Math.max(remainingTicks, 0) / ambulance.totalTicks;
-      if (remainingTicks > 0) return { ...ambulance, status: progress > 0.22 ? "En Route" : "Dispatched", remainingTicks, progress };
-
-      if (ambulance.status === "Returning") return { ...ambulance, status: "Idle", progress: 0, remainingTicks: 0, totalTicks: 0 };
-
-      const patient = generatePatient(this.tickCount, "Ambulance");
-      this.addPatient(patient);
-      this.logEvent("ambulance-arrived", `${ambulance.id} arrived with ${patient.name}.`, patient);
-      return { ...ambulance, status: "Returning", remainingTicks: 10, totalTicks: 10, progress: 0 };
+      return { ...ambulance, status: progress > 0.22 ? "En Route" : "Dispatched", remainingTicks: Math.max(0, remainingTicks), progress: Math.min(1, progress) };
     });
   }
 
@@ -352,15 +442,18 @@ export class SimulationEngine {
     this.ambulances = [...existing, ...extra];
   }
 
-  private poisson(lambda: number) {
-    const limit = Math.exp(-lambda);
-    let product = 1;
-    let count = 0;
-    do {
-      count += 1;
-      product *= Math.random();
-    } while (product > limit);
-    return count - 1;
+  private removePatientFromQueue(patientId: string) {
+    return this.queue.remove((patient) => patient.id === patientId);
+  }
+
+  private removePatientFromDoctor(patientId: string) {
+    let removed: Patient | undefined;
+    this.doctors = this.doctors.map((doctor) => {
+      if (doctor.patient?.id !== patientId) return doctor;
+      removed = doctor.patient;
+      return { ...doctor, status: "Idle", patient: undefined, startedAt: undefined, treatmentTicks: 0, remainingTicks: 0 };
+    });
+    return removed;
   }
 
   private logEvent(type: SimEvent["type"], message: string, patient?: Patient) {
