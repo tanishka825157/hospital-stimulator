@@ -1,9 +1,8 @@
-import { HelpCircle } from "lucide-react";
+import { SlidersHorizontal } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useSimulationStore } from "@/store/useSimulationStore";
 
 const controls = [
-  { key: "arrivalRate", label: "Arrivals / min", min: 1, max: 24 },
   { key: "doctorCount", label: "Doctors", min: 1, max: 10 },
   { key: "icuBedCount", label: "ICU Beds", min: 2, max: 14 },
   { key: "ambulanceCount", label: "Ambulances", min: 1, max: 8 }
@@ -14,8 +13,8 @@ export function ConfigSliders() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Scenario Inputs</CardTitle>
-        <HelpCircle className="h-4 w-4 text-accent transition-colors hover:text-accent/80 cursor-help" aria-label="Poisson arrivals model independent emergency arrivals over time." />
+        <CardTitle>Capacity Inputs</CardTitle>
+        <SlidersHorizontal className="h-4 w-4 text-accent" />
       </CardHeader>
       <CardContent className="space-y-4">
         {controls.map((control) => (
@@ -30,7 +29,7 @@ export function ConfigSliders() {
               min={control.min}
               max={control.max}
               value={config[control.key]}
-              title={control.key === "arrivalRate" ? "Arrivals use a Poisson process because emergencies are independent events with an average rate." : control.label}
+              title={control.label}
               onChange={(event) => actions.updateConfig({ [control.key]: Number(event.target.value) })}
             />
           </label>

@@ -1,12 +1,12 @@
 /**
  * ICUOverridePanel — Admin-only ICU bed maintenance controls.
- * Extends ICUPanel with a toggle per bed to mark it "Under Maintenance".
- * Maintenance beds are shown with a distinct amber style and are skipped
- * by the engine when admitting CRITICAL patients.
+ * ICU beds no longer auto-fill or auto-release. Admins assign patients from
+ * the queue and discharge them here when care is complete.
  */
 import { Bed, Siren, Wrench } from "lucide-react";
 import { motion } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { severityColor } from "@/engine/Patient";
 import { useSimulationStore } from "@/store/useSimulationStore";
 
@@ -31,7 +31,7 @@ export function ICUOverridePanel() {
         </div>
       )}
 
-      <CardContent className="grid grid-cols-[repeat(auto-fill,minmax(88px,1fr))] gap-3">
+      <CardContent className="grid grid-cols-[repeat(auto-fill,minmax(112px,1fr))] gap-3">
         {icuBeds.map((bed) => {
           const patient = bed.patient;
           const severity = patient?.severity;
@@ -42,7 +42,7 @@ export function ICUOverridePanel() {
             <motion.div
               layout
               key={bed.id}
-              className={`aspect-square rounded-xl border flex flex-col justify-between p-2.5 transition-all duration-300 cursor-pointer group ${
+              className={`min-h-[112px] rounded-xl border flex flex-col justify-between p-2.5 transition-all duration-300 group ${
                 isMaintenance
                   ? "border-moderate/40 bg-moderate/8 hover:border-moderate/70"
                   : occupied
@@ -53,8 +53,7 @@ export function ICUOverridePanel() {
                 borderColor: `${severityColor[severity]}40`,
                 backgroundColor: `${severityColor[severity]}12`
               } : {}}
-              title={isMaintenance ? "Click to restore bed" : "Click to mark as maintenance"}
-              onClick={() => !occupied && actions.setICUBedMaintenance(bed.id, !isMaintenance)}
+              title={isMaintenance ? "Under maintenance" : occupied ? patient?.name : "Open bed"}
             >
               <div className="flex items-center justify-between text-[9px] font-bold uppercase tracking-wider text-muted/60 leading-none">
                 <span>{bed.id}</span>
@@ -82,11 +81,19 @@ export function ICUOverridePanel() {
                 </span>
               </div>
 
-              {/* Hover hint for unoccupied beds */}
-              {!occupied && !isMaintenance && (
-                <div className="absolute inset-0 rounded-xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-command/60 text-[9px] text-muted font-bold">
-                  Set Maint.
-                </div>
+              {occupied && patient ? (
+                <Button size="sm" variant="secondary" className="h-7 px-2 text-[10px]" onClick={() => actions.dischargePatient(patient.id)}>
+                  Discharge
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="h-7 px-2 text-[10px]"
+                  onClick={() => actions.setBedStatus(bed.id, isMaintenance ? "Empty" : "Under Maintenance")}
+                >
+                  {isMaintenance ? "Restore" : "Maint."}
+                </Button>
               )}
             </motion.div>
           );

@@ -3,17 +3,13 @@
  *
  * Patients never see simulation controls (not disabled — fully absent from DOM).
  * All state comes from Supabase Realtime via useRealtimeSync + store.hydrate().
- *
- * Layout: cinematic "broadcast" feel — spacious, emphasizes key stats,
- * Learn Mode narration is always visible on the right.
  */
 import { useState } from "react";
-import { Activity, BarChart3, Ambulance, Bed, BookOpen, LayoutDashboard, ListTree, LogOut, Stethoscope } from "lucide-react";
+import { Activity, BarChart3, Ambulance, Bed, ClipboardList, LayoutDashboard, ListTree, LogOut, Stethoscope } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { AmbulancePanel } from "@/components/ambulances/AmbulancePanel";
 import { DoctorPanel } from "@/components/doctors/DoctorPanel";
 import { ICUPanel } from "@/components/icu/ICUPanel";
-import { HowItWorks } from "@/components/learn-mode/HowItWorks";
 import { QueuePanel } from "@/components/queue/QueuePanel";
 import { ReportsPanel } from "@/components/reports/ReportsPanel";
 import { StatTicker } from "@/components/dashboard/StatTicker";
@@ -32,14 +28,13 @@ const navItems = [
   { label: "Doctors", icon: Stethoscope },
   { label: "ICU", icon: Bed },
   { label: "Ambulances", icon: Ambulance },
-  { label: "Reports", icon: BarChart3 },
-  { label: "Learn", icon: BookOpen }
+  { label: "Reports", icon: BarChart3 }
 ] as const;
 
-type View = "Dashboard" | "Queue" | "Doctors" | "ICU" | "Ambulances" | "Reports" | "Learn";
+type View = "Dashboard" | "Queue" | "Doctors" | "ICU" | "Ambulances" | "Reports";
 
 export function WatchDashboard() {
-  const { sessionEnded, capacityCrisis, narration, tick } = useSimulationStore();
+  const { sessionEnded, capacityCrisis, tick } = useSimulationStore();
   const profile = useAuthStore((state) => state.profile);
   const logout = useAuthStore((state) => state.actions.logout);
   const [selectedView, setSelectedView] = useState<View>("Dashboard");
@@ -85,7 +80,7 @@ export function WatchDashboard() {
         </div>
 
         <nav className="flex-1 space-y-1">
-          {(["Dashboard", "Queue", "Doctors", "ICU", "Ambulances", "Reports", "Learn"] as View[]).map((view) => {
+          {(["Dashboard", "Queue", "Doctors", "ICU", "Ambulances", "Reports"] as View[]).map((view) => {
             const item = navItems.find((n) => n.label === view)!;
             const isActive = selectedView === view;
             return (
@@ -137,7 +132,7 @@ export function WatchDashboard() {
           )}
         </header>
 
-        {/* Content + Learn sidebar */}
+        {/* Content + live activity sidebar */}
         <div className="flex flex-1">
           <div className="flex-1 p-8 space-y-6">
             <AnimatePresence mode="wait">
@@ -148,35 +143,46 @@ export function WatchDashboard() {
                 {selectedView === "ICU" && <ICUPanel />}
                 {selectedView === "Ambulances" && <AmbulancePanel />}
                 {selectedView === "Reports" && <ReportsPanel />}
-                {selectedView === "Learn" && <HowItWorks />}
               </motion.div>
             </AnimatePresence>
           </div>
 
-          {/* Right sidebar — Learn narration + About */}
+          {/* Right sidebar — live activity + About */}
           <aside className="w-[300px] shrink-0 border-l border-line bg-panel/40 p-6 space-y-6 overflow-y-auto thin-scrollbar">
-            <div>
-              <h3 className="text-[10px] uppercase tracking-widest font-bold text-muted mb-3">Live Narration</h3>
-              {narration.length === 0 ? (
-                <p className="text-xs text-muted/60 leading-relaxed">Narration will appear here as the simulation runs.</p>
-              ) : (
-                <div className="space-y-3">
-                  {narration.map((event) => (
-                    <div key={event.id} className="rounded-xl border border-line bg-elevated/40 px-3 py-3 space-y-1">
-                      <div className="font-mono text-[10px] text-accent font-semibold flex items-center gap-1.5">
-                        <span className="h-1 w-1 rounded-full bg-accent animate-ping" />
-                        t+{event.tick}s
-                      </div>
-                      <p className="text-xs leading-relaxed text-ink/80">{event.message}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+            <ActivityFeed />
             <AboutPanel />
           </aside>
         </div>
       </main>
+    </div>
+  );
+}
+
+function ActivityFeed() {
+  const events = useSimulationStore((state) => state.events);
+  const recentEvents = events.slice(0, 8);
+
+  return (
+    <div>
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-[10px] uppercase tracking-widest font-bold text-muted">Live Activity</h3>
+        <ClipboardList className="h-4 w-4 text-accent" />
+      </div>
+      {recentEvents.length === 0 ? (
+        <p className="text-xs text-muted/60 leading-relaxed">Admin actions will appear here as the scenario runs.</p>
+      ) : (
+        <div className="space-y-3">
+          {recentEvents.map((event) => (
+            <div key={event.id} className="rounded-xl border border-line bg-elevated/40 px-3 py-3 space-y-1">
+              <div className="font-mono text-[10px] text-accent font-semibold flex items-center gap-1.5">
+                <span className="h-1 w-1 rounded-full bg-accent animate-ping" />
+                t+{event.tick}s
+              </div>
+              <p className="text-xs leading-relaxed text-ink/80">{event.message}</p>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

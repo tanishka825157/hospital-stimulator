@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { Pause, Play, RotateCcw, SunMedium, Moon, GraduationCap } from "lucide-react";
+import { Pause, Play, RotateCcw, SunMedium, Moon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useSimulationStore } from "@/store/useSimulationStore";
 
 export function Controls() {
-  const { running, config, learnMode, actions } = useSimulationStore();
+  const { running, config, actions } = useSimulationStore();
   const [lightMode, setLightMode] = useState(false);
 
   useEffect(() => {
@@ -45,10 +45,6 @@ export function Controls() {
           </option>
         ))}
       </select>
-      <Button variant={learnMode ? "default" : "secondary"} onClick={() => actions.setLearnMode(!learnMode)}>
-        <GraduationCap className="h-4 w-4" />
-        Learn {learnMode ? "On" : "Off"}
-      </Button>
       <Button variant="ghost" size="icon" title={lightMode ? "Dark mode" : "Light mode"} onClick={() => setLightMode((value) => !value)}>
         {lightMode ? <Moon className="h-4 w-4" /> : <SunMedium className="h-4 w-4" />}
       </Button>

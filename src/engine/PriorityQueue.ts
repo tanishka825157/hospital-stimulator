@@ -33,6 +33,14 @@ export class PriorityQueue<T> {
     this.heap = [];
   }
 
+  remove(predicate: (item: T) => boolean): T | undefined {
+    const index = this.heap.findIndex(predicate);
+    if (index === -1) return undefined;
+    const [removed] = this.heap.splice(index, 1);
+    this.rebuild(this.heap);
+    return removed;
+  }
+
   toArray(): T[] {
     return [...this.heap].sort(this.compare);
   }

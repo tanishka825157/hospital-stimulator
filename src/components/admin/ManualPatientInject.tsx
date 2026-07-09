@@ -1,32 +1,70 @@
 /**
- * ManualPatientInject — Admin-only control.
- * Lets the admin manually add a patient with a specific severity,
- * bypassing the Poisson arrival model. Useful for live demos and stress tests.
+ * ManualPatientInject — Admin-only patient intake.
+ * Every patient now starts here (or from a confirmed ambulance arrival);
+ * the engine no longer creates walk-ins automatically.
  */
 import { useState } from "react";
-import { UserPlus } from "lucide-react";
+import { Shuffle, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useSimulationStore } from "@/store/useSimulationStore";
 import type { Severity } from "@/engine/Patient";
 import { severityColor } from "@/engine/Patient";
 
 const severities: Severity[] = ["CRITICAL", "SERIOUS", "MODERATE", "MILD"];
+const names = ["Amara Osei", "Priya Shah", "Noah Brooks", "Maya Chen", "Omar Khan", "Sofia Garcia"];
+const symptoms = ["chest pain", "severe asthma attack", "compound fracture", "abdominal pain", "high fever", "minor burn"];
+
+function randomForm() {
+  return {
+    name: names[Math.floor(Math.random() * names.length)],
+    age: String(8 + Math.floor(Math.random() * 82)),
+    symptom: symptoms[Math.floor(Math.random() * symptoms.length)]
+  };
+}
 
 export function ManualPatientInject() {
-  const { actions, running } = useSimulationStore();
+  const { actions } = useSimulationStore();
   const [selected, setSelected] = useState<Severity>("SERIOUS");
+  const [form, setForm] = useState(randomForm);
   const [flash, setFlash] = useState(false);
 
   const inject = () => {
-    if (!running) return;
-    actions.injectPatient(selected);
+    actions.addPatient({ name: form.name, age: Number(form.age), symptom: form.symptom, severity: selected });
     setFlash(true);
     setTimeout(() => setFlash(false), 600);
   };
 
   return (
     <div className={`rounded-xl border bg-panel/80 p-4 transition-all duration-300 ${flash ? "border-accent/60 shadow-[0_0_16px_rgba(45,212,191,0.15)]" : "border-line"}`}>
-      <p className="mb-3 text-[10px] uppercase tracking-widest font-bold text-muted">Manual Inject</p>
+      <div className="mb-3 flex items-center justify-between">
+        <p className="text-[10px] uppercase tracking-widest font-bold text-muted">Add Patient</p>
+        <button className="rounded p-1 text-muted hover:bg-elevated hover:text-ink" title="Randomize fields" onClick={() => setForm(randomForm())}>
+          <Shuffle className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      <div className="mb-3 space-y-2">
+        <input
+          value={form.name}
+          onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+          className="h-8 w-full rounded-lg border border-line bg-command/60 px-2 text-xs text-ink outline-none focus:border-accent/60"
+          placeholder="Patient name"
+        />
+        <div className="grid grid-cols-[64px,1fr] gap-2">
+          <input
+            value={form.age}
+            onChange={(event) => setForm((current) => ({ ...current, age: event.target.value }))}
+            className="h-8 rounded-lg border border-line bg-command/60 px-2 text-xs text-ink outline-none focus:border-accent/60"
+            placeholder="Age"
+            inputMode="numeric"
+          />
+          <input
+            value={form.symptom}
+            onChange={(event) => setForm((current) => ({ ...current, symptom: event.target.value }))}
+            className="h-8 rounded-lg border border-line bg-command/60 px-2 text-xs text-ink outline-none focus:border-accent/60"
+            placeholder="Symptom"
+          />
+        </div>
+      </div>
       <div className="flex gap-1.5 mb-3">
         {severities.map((sev) => (
           <button
@@ -45,15 +83,12 @@ export function ManualPatientInject() {
         className="w-full"
         size="sm"
         onClick={inject}
-        disabled={!running}
-        title={running ? `Inject a ${selected} patient` : "Start simulation first"}
+        disabled={!form.name.trim() || !form.symptom.trim()}
+        title={`Add a ${selected} patient`}
       >
         <UserPlus className="h-3.5 w-3.5" />
         Add Patient
       </Button>
-      {!running && (
-        <p className="mt-2 text-center text-[10px] text-muted/60">Start simulation to inject</p>
-      )}
     </div>
   );
 }
