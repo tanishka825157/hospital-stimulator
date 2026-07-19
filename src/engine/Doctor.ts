@@ -27,6 +27,24 @@ export interface Doctor {
   manualOverride?: boolean;
 }
 
+export interface DoctorInput {
+  name: string;
+  status?: Exclude<DoctorStatus, "Treating">;
+  specialty?: string;
+}
+
+export function createDoctor(input: DoctorInput, index: number): Doctor {
+  return {
+    id: `D-${Date.now()}-${index}`,
+    name: input.name.trim(),
+    status: input.status ?? "Idle",
+    treatmentTicks: 0,
+    remainingTicks: 0,
+    treatedCount: 0,
+    manualOverride: input.status === "On Break" || input.status === "In Surgery",
+  };
+}
+
 export function createDoctors(count: number): Doctor[] {
   return Array.from({ length: count }, (_, index) => ({
     id: `D-${index + 1}`,

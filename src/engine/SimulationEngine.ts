@@ -1,12 +1,11 @@
 import { createAmbulances, type Ambulance } from "@/engine/Ambulance";
-import { createDoctors, treatmentDuration, type Doctor, type DoctorStatus } from "@/engine/Doctor";
+import { createDoctor, treatmentDuration, type Doctor, type DoctorInput, type DoctorStatus } from "@/engine/Doctor";
 import { createICUBeds, icuDuration, type ICUBed } from "@/engine/ICU";
 import { generatePatient, patientComparator, escalatePatient, type Patient, type Severity } from "@/engine/Patient";
 import { EventLog, type SimEvent } from "@/engine/events";
 import { PriorityQueue } from "@/engine/PriorityQueue";
 
 export interface SimulationConfig {
-  doctorCount: number;
   icuBedCount: number;
   ambulanceCount: number;
   speed: number;
@@ -59,7 +58,6 @@ export interface SimulationSnapshot {
 type Listener = (snapshot: SimulationSnapshot, latest?: SimEvent) => void;
 
 const defaultConfig: SimulationConfig = {
-  doctorCount: 5,
   icuBedCount: 8,
   ambulanceCount: 4,
   speed: 1
@@ -73,7 +71,7 @@ export class SimulationEngine {
   private timer?: number;
   private config: SimulationConfig = { ...defaultConfig };
   private queue = new PriorityQueue<Patient>(patientComparator);
-  private doctors: Doctor[] = createDoctors(defaultConfig.doctorCount);
+  private doctors: Doctor[] = [];
   private icuBeds: ICUBed[] = createICUBeds(defaultConfig.icuBedCount);
   private ambulances: Ambulance[] = createAmbulances(defaultConfig.ambulanceCount);
   private log = new EventLog();
@@ -105,7 +103,7 @@ export class SimulationEngine {
     this.pause();
     this.tickCount = 0;
     this.queue.clear();
-    this.doctors = createDoctors(this.config.doctorCount);
+    this.doctors = [];
     this.icuBeds = createICUBeds(this.config.icuBedCount);
     this.ambulances = createAmbulances(this.config.ambulanceCount);
     this.log.clear();
@@ -123,7 +121,6 @@ export class SimulationEngine {
 
   updateConfig(config: Partial<Omit<SimulationConfig, "speed">>) {
     this.config = { ...this.config, ...config };
-    if (config.doctorCount !== undefined) this.resizeDoctors(config.doctorCount);
     if (config.icuBedCount !== undefined) this.resizeICU(config.icuBedCount);
     if (config.ambulanceCount !== undefined) this.resizeAmbulances(config.ambulanceCount);
     this.emit();
@@ -131,9 +128,9 @@ export class SimulationEngine {
 
   applyScenario(name: "normal" | "mass-casualty" | "night-shift") {
     const presets = {
-      normal: { doctorCount: 5, icuBedCount: 8, ambulanceCount: 4 },
-      "mass-casualty": { doctorCount: 7, icuBedCount: 9, ambulanceCount: 6 },
-      "night-shift": { doctorCount: 3, icuBedCount: 6, ambulanceCount: 2 }
+      normal: { icuBedCount: 8, ambulanceCount: 4 },
+      "mass-casualty": { icuBedCount: 9, ambulanceCount: 6 },
+      "night-shift": { icuBedCount: 6, ambulanceCount: 2 }
     };
     this.updateConfig(presets[name]);
   }
@@ -160,6 +157,16 @@ export class SimulationEngine {
     this.enqueuePatient(patient, `${patient.name}, ${patient.age}, arrived with ${patient.symptom}.`);
     this.emit();
     return patient;
+  }
+
+  addDoctor(input: DoctorInput) {
+    const name = input.name.trim();
+    if (!name) return;
+    const doctor = createDoctor({ ...input, name }, this.doctors.length + 1);
+    this.doctors = [...this.doctors, doctor];
+    this.logEvent("doctor-added", `${doctor.name} added as ${doctor.status}.`);
+    this.emit();
+    return doctor;
   }
 
   assignPatientToDoctor(patientId: string, doctorId: string) {
@@ -422,12 +429,6 @@ export class SimulationEngine {
     // Crisis if ICU is full (no non-maintenance beds free) and a critical patient is waiting
     const availableBeds = this.icuBeds.filter((bed) => !bed.patient && !bed.maintenance);
     return availableBeds.length === 0 && queue.some((patient) => patient.severity === "CRITICAL" && this.tickCount - patient.arrivalTick > 24);
-  }
-
-  private resizeDoctors(count: number) {
-    const existing = this.doctors.slice(0, count);
-    const extra = count > existing.length ? createDoctors(count).slice(existing.length) : [];
-    this.doctors = [...existing, ...extra];
   }
 
   private resizeICU(count: number) {

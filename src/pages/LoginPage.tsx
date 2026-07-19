@@ -83,7 +83,7 @@ export function LoginPage() {
     <div className="grid min-h-screen lg:grid-cols-2">
       {/* ── Left hero panel ─────────────────────────────────── */}
       <div className="relative hidden overflow-hidden bg-panel lg:flex lg:flex-col lg:justify-between lg:p-12">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(45,212,191,0.10),transparent_50%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(125,211,252,0.10),transparent_50%)]" />
         <div className="relative flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent text-command shadow-sm">
             <Activity className="h-5 w-5" />
