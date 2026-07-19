@@ -48,7 +48,7 @@ export function AmbulancePanel({ editable = false }: { editable?: boolean }) {
                 {/* Glowing target tracking dot */}
                 {!isIdle && (
                   <motion.div
-                    className="absolute top-1/2 -translate-y-1/2 -ml-1 h-2 w-2 rounded-full bg-accent shadow-[0_0_8px_rgba(45,212,191,0.8)]"
+                    className="absolute top-1/2 -translate-y-1/2 -ml-1 h-2 w-2 rounded-full bg-accent shadow-[0_0_8px_rgba(125,211,252,0.8)]"
                     animate={{ left: `${Math.round(ambulance.progress * 100)}%` }}
                     transition={{ ease: "linear", duration: 1 / speed }}
                   />

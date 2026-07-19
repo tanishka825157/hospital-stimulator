@@ -35,7 +35,7 @@ export function ManualPatientInject() {
   };
 
   return (
-    <div className={`rounded-xl border bg-panel/80 p-4 transition-all duration-300 ${flash ? "border-accent/60 shadow-[0_0_16px_rgba(45,212,191,0.15)]" : "border-line"}`}>
+    <div className={`rounded-xl border bg-panel/80 p-4 transition-all duration-300 ${flash ? "border-accent/60 shadow-[0_0_16px_rgba(125,211,252,0.14)]" : "border-line"}`}>
       <div className="mb-3 flex items-center justify-between">
         <p className="text-[10px] uppercase tracking-widest font-bold text-muted">Add Patient</p>
         <button className="rounded p-1 text-muted hover:bg-elevated hover:text-ink" title="Randomize fields" onClick={() => setForm(randomForm())}>

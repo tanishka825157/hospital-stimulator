@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { simulationEngine, type BedStatus, type PatientInput, type SimulationSnapshot } from "@/engine/SimulationEngine";
 import type { Severity } from "@/engine/Patient";
-import type { DoctorStatus } from "@/engine/Doctor";
+import type { DoctorInput, DoctorStatus } from "@/engine/Doctor";
 
 interface SimulationStore extends SimulationSnapshot {
   selectedView: "Dashboard" | "Queue" | "Doctors" | "ICU" | "Ambulances" | "Reports";
@@ -19,6 +19,7 @@ interface SimulationStore extends SimulationSnapshot {
     setSelectedView: (view: SimulationStore["selectedView"]) => void;
     downloadReport: () => void;
     addPatient: (input: PatientInput) => void;
+    addDoctor: (input: DoctorInput) => void;
     assignPatientToDoctor: (patientId: string, doctorId: string) => void;
     assignPatientToBed: (patientId: string, bedId: string) => void;
     setDoctorStatus: (doctorId: string, status: DoctorStatus) => void;
@@ -98,6 +99,7 @@ export const useSimulationStore = create<SimulationStore>((set, get) => {
 
       // ─── ADMIN-CONTROLLED WORKFLOW ───────────────────────────────────────
       addPatient: (input) => simulationEngine.addPatient(input),
+      addDoctor: (input) => simulationEngine.addDoctor(input),
       assignPatientToDoctor: (patientId, doctorId) => simulationEngine.assignPatientToDoctor(patientId, doctorId),
       assignPatientToBed: (patientId, bedId) => simulationEngine.assignPatientToBed(patientId, bedId),
       setDoctorStatus: (doctorId, status) => simulationEngine.setDoctorStatus(doctorId, status),

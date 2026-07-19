@@ -17,10 +17,10 @@ import { useState, useEffect } from "react";
 import { Activity, Ambulance, BarChart3, Bed, LayoutDashboard, ListTree, Stethoscope, LogOut, Radio, Users, XCircle, SunMedium, Moon, Pause, Play, RotateCcw, ClipboardList } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { AmbulancePanel } from "@/components/ambulances/AmbulancePanel";
-import { ConfigSliders } from "@/components/dashboard/ConfigSliders";
 import { StatTicker } from "@/components/dashboard/StatTicker";
 import { DoctorOverridePanel } from "@/components/admin/DoctorOverridePanel";
 import { ICUOverridePanel } from "@/components/admin/ICUOverridePanel";
+import { ManualDoctorAdd } from "@/components/admin/ManualDoctorAdd";
 import { ManualPatientInject } from "@/components/admin/ManualPatientInject";
 import { QueuePanel } from "@/components/queue/QueuePanel";
 import { ReportsPanel } from "@/components/reports/ReportsPanel";
@@ -57,7 +57,7 @@ export function AdminDashboard() {
   return (
     <div className="min-h-screen bg-command text-ink selection:bg-accent/20">
       {/* ─── SIDEBAR ─────────────────────────────────────────────── */}
-      <aside className="fixed inset-y-0 left-0 z-10 w-[240px] border-r border-line bg-panel p-6 flex flex-col gap-6">
+      <aside className="thin-scrollbar fixed inset-y-0 left-0 z-10 flex w-[240px] flex-col gap-6 overflow-y-auto border-r border-line bg-panel p-6">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent text-command shadow-sm">
             <Activity className="h-5 w-5 stroke-[2]" />
@@ -91,6 +91,7 @@ export function AdminDashboard() {
         {/* Sidebar bottom — inject + logout */}
         <div className="space-y-3 border-t border-line pt-4">
           <ManualPatientInject />
+          <ManualDoctorAdd />
           <div className="flex items-center justify-between text-xs text-muted">
             <span className="flex items-center gap-1.5">
               <Users className="h-3 w-3" />
@@ -224,7 +225,6 @@ function AdminDashboardGrid() {
     <div className="grid grid-cols-12 gap-6">
       <div className="col-span-7"><QueuePanel editable /></div>
       <div className="col-span-5 space-y-6">
-        <ConfigSliders />
         <ActivityFeed />
         <DoctorOverridePanel />
       </div>

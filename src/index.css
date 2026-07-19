@@ -8,22 +8,22 @@
     font-family: Inter, ui-sans-serif, system-ui, sans-serif;
 
     /* RGB channels — used by Tailwind for opacity modifier support (bg-panel/80 etc.) */
-    --color-command-rgb:  8   12  21;
-    --color-panel-rgb:    15  22  35;
-    --color-elevated-rgb: 20  28  46;
-    --color-line-rgb:     30  42  61;
-    --color-ink-rgb:      226 232 240;
-    --color-muted-rgb:    124 140 168;
-    --color-accent-rgb:   45  212 191;
+    --color-command-rgb:  14  12  20;
+    --color-panel-rgb:    24  22  32;
+    --color-elevated-rgb: 34  31  45;
+    --color-line-rgb:     55  49  68;
+    --color-ink-rgb:      245 247 250;
+    --color-muted-rgb:    160 153 178;
+    --color-accent-rgb:   125 211 252;
 
     /* Solid fallback vars (used in places that don't need opacity like var(--color-panel) directly) */
-    --color-command:  rgb(8   12  21);
-    --color-panel:    rgb(15  22  35);
-    --color-elevated: rgb(20  28  46);
-    --color-line:     rgb(30  42  61);
-    --color-ink:      rgb(226 232 240);
-    --color-muted:    rgb(124 140 168);
-    --color-accent:   rgb(45  212 191);
+    --color-command:  rgb(14  12  20);
+    --color-panel:    rgb(24  22  32);
+    --color-elevated: rgb(34  31  45);
+    --color-line:     rgb(55  49  68);
+    --color-ink:      rgb(245 247 250);
+    --color-muted:    rgb(160 153 178);
+    --color-accent:   rgb(125 211 252);
     --color-critical: #EF4444;
     --color-serious:  #F97316;
     --color-moderate: #EAB308;
@@ -41,21 +41,21 @@
 
   .light-mode {
     color-scheme: light;
-    --color-command-rgb:  240 244 250;
+    --color-command-rgb:  246 247 251;
     --color-panel-rgb:    255 255 255;
-    --color-elevated-rgb: 232 238 248;
-    --color-line-rgb:     205 215 232;
-    --color-ink-rgb:      15  31  53;
-    --color-muted-rgb:    90  106 130;
-    --color-accent-rgb:   13  148 136;
+    --color-elevated-rgb: 236 240 247;
+    --color-line-rgb:     211 218 231;
+    --color-ink-rgb:      24  27  37;
+    --color-muted-rgb:    99  108 130;
+    --color-accent-rgb:   2   132 199;
 
-    --color-command:  rgb(240 244 250);
+    --color-command:  rgb(246 247 251);
     --color-panel:    rgb(255 255 255);
-    --color-elevated: rgb(232 238 248);
-    --color-line:     rgb(205 215 232);
-    --color-ink:      rgb(15  31  53);
-    --color-muted:    rgb(90  106 130);
-    --color-accent:   rgb(13  148 136);
+    --color-elevated: rgb(236 240 247);
+    --color-line:     rgb(211 218 231);
+    --color-ink:      rgb(24  27  37);
+    --color-muted:    rgb(99  108 130);
+    --color-accent:   rgb(2   132 199);
   }
 
   button, input, select { font: inherit; }

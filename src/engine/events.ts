@@ -7,6 +7,7 @@ export type SimEventType =
   | "severity-overridden"
   | "doctor-started"
   | "doctor-finished"
+  | "doctor-added"
   | "doctor-status"
   | "icu-admitted"
   | "icu-released"
